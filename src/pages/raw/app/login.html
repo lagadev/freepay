@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="bn">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>লগইন · PayLink</title>
+<link href="https://fonts.googleapis.com/css2?family=Hind+Siliguri:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/style.css">
+</head>
+<body>
+<div class="authwrap">
+  <div class="authcard">
+    <div class="logo">Pay<span>Link</span></div>
+    <h1>লগইন করুন</h1>
+    <div class="autherr" id="authErr"></div>
+    <form id="authForm">
+      <div class="field"><label>ইমেইল</label><input type="email" id="email" required autocomplete="email" /></div>
+      <div class="field"><label>পাসওয়ার্ড</label><input type="password" id="password" required autocomplete="current-password" minlength="8" /></div>
+      <button class="btn btn-primary btn-block" type="submit" id="submitBtn">লগইন</button>
+    </form>
+    <div class="authfoot">নতুন এখানে? <a href="/app/signup.html">ফ্রি অ্যাকাউন্ট খুলুন</a></div>
+  </div>
+</div>
+<script src="/assets/app.js"></script>
+<script>
+document.getElementById("authForm").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const errBox = document.getElementById("authErr");
+  errBox.classList.remove("show");
+  document.getElementById("submitBtn").disabled = true;
+  const r = await PL.api("/auth/login", {
+    method: "POST",
+    body: { email: document.getElementById("email").value.trim(), password: document.getElementById("password").value },
+  });
+  if (!r.ok) {
+    errBox.textContent = r.data.error || "লগইন ব্যর্থ হয়েছে।";
+    errBox.classList.add("show");
+    document.getElementById("submitBtn").disabled = false;
+    return;
+  }
+  location.href = r.data.user.isAdmin ? "/app/admin/index.html" : "/app/dashboard.html";
+});
+</script>
+</body>
+</html>
