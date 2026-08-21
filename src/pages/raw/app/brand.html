@@ -1,0 +1,179 @@
+<!doctype html>
+<html lang="bn">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Brand Management · PayLink</title>
+<link href="https://fonts.googleapis.com/css2?family=Hind+Siliguri:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/style.css">
+<style>
+.brandcard{display:flex;align-items:center;gap:14px;padding:16px;border:1px solid var(--line);border-radius:16px;cursor:pointer;}
+.brandcard:hover{border-color:var(--accent);}
+.brandcard.active{border-color:var(--accent);background:var(--accent-soft);}
+.blogo{width:46px;height:46px;border-radius:13px;background:var(--chip);display:flex;align-items:center;justify-content:center;font-weight:800;color:var(--purple);flex:none;overflow:hidden;}
+.blogo img{width:100%;height:100%;object-fit:cover;}
+.bmeta .bname{font-weight:700;font-size:14px;}
+.bmeta .bdomain{font-size:11.5px;color:var(--muted);}
+.bstatus{margin-left:auto;}
+.methodrow-swatch{width:32px;height:32px;border-radius:9px;display:flex;align-items:center;justify-content:center;color:#fff;font-size:11px;font-weight:800;flex:none;}
+</style>
+</head>
+<body>
+<div id="navSlot"></div>
+<div class="page">
+  <h1 class="pagetitle">Brand Management</h1>
+  <p class="pagesub">প্রতিটা ব্র্যান্ডের নিজস্ব নাম্বার, নিজস্ব API key, নিজস্ব লোগো থাকে।</p>
+
+  <div class="card">
+    <h3 style="margin:0 0 14px;font-size:14.5px;">নতুন Brand তৈরি করুন</h3>
+    <div class="grid2">
+      <div class="field"><label>Brand Name</label><input type="text" id="newName" placeholder="যেমন: My Shop" /></div>
+      <div class="field"><label>Domain Name (তৈরির পর লক হয়ে যাবে)</label><input type="text" id="newDomain" placeholder="mysite.com" /></div>
+    </div>
+    <button class="btn btn-primary" id="createBtn">+ Brand তৈরি করুন</button>
+  </div>
+
+  <div class="grid2" style="margin-top:20px;align-items:flex-start;">
+    <div>
+      <h3 style="font-size:14.5px;margin:0 0 12px;">আপনার Brands</h3>
+      <div id="brandList" style="display:flex;flex-direction:column;gap:10px;"><div class="empty">লোড হচ্ছে...</div></div>
+    </div>
+
+    <div id="detailPanel"></div>
+  </div>
+</div>
+
+<script src="/assets/app.js"></script>
+<script>
+const METHODS = [
+  { id: "bkash", label: "bKash", color: "#E2136E" },
+  { id: "nagad", label: "Nagad", color: "#F0561F" },
+  { id: "upay", label: "Upay", color: "#7A1FA2" },
+  { id: "rocket", label: "Rocket", color: "#8C1AF6" },
+  { id: "cellfin", label: "Cellfin", color: "#0A6E4E" },
+];
+
+let brands = [];
+let activeId = null;
+
+async function loadBrands() {
+  const r = await PL.api("/brands");
+  brands = (r.ok && r.data.brands) || [];
+  renderList();
+  if (brands.length && !activeId) selectBrand(brands[0].id);
+  else if (!brands.length) document.getElementById("detailPanel").innerHTML = "";
+}
+
+function renderList() {
+  const list = document.getElementById("brandList");
+  if (!brands.length) { list.innerHTML = '<div class="empty">এখনো কোনো Brand তৈরি হয়নি।</div>'; return; }
+  list.innerHTML = brands.map((b) => `
+    <div class="brandcard ${b.id === activeId ? "active" : ""}" data-id="${b.id}">
+      <div class="blogo">${b.logoUrl ? `<img src="${b.logoUrl}" />` : b.name.charAt(0).toUpperCase()}</div>
+      <div class="bmeta"><div class="bname">${b.name}</div><div class="bdomain">${b.domain || "কোনো ডোমেইন যোগ করা হয়নি"}</div></div>
+      <div class="bstatus"><span class="badge ${b.enabled ? "verified" : "expired"}">${b.enabled ? "ACTIVE" : "DISABLED"}</span></div>
+    </div>`).join("");
+  list.querySelectorAll(".brandcard").forEach((el) => el.addEventListener("click", () => selectBrand(el.dataset.id)));
+}
+
+function selectBrand(id) {
+  activeId = id;
+  renderList();
+  renderDetail(brands.find((b) => b.id === id));
+}
+
+function renderDetail(brand) {
+  const panel = document.getElementById("detailPanel");
+  if (!brand) { panel.innerHTML = ""; return; }
+
+  panel.innerHTML = `
+    <div class="card">
+      <h3 style="margin:0 0 14px;font-size:14.5px;">Brand প্রোফাইল</h3>
+      <div class="field"><label>Brand Name</label><input type="text" id="editName" value="${brand.name}" /></div>
+      <div class="field"><label>Brand Logo URL</label><input type="text" id="editLogo" value="${brand.logoUrl || ""}" placeholder="https://.../logo.png" /></div>
+      <div class="field"><label>Domain Name (Locked)</label><input type="text" value="${brand.domain || "—"}" disabled /></div>
+      <button class="btn btn-dark" id="saveProfileBtn">সেভ করুন</button>
+    </div>
+
+    <div class="card">
+      <h3 style="margin:0 0 4px;font-size:14.5px;">Payment Methods</h3>
+      <p style="font-size:12px;color:var(--muted);margin:0 0 10px;">যেই মেথড এনেবল করবেন আর নাম্বার দেবেন, শুধু সেটাই কাস্টমার pay পেজে দেখতে পাবে।</p>
+      <div id="methodRows"></div>
+      <button class="btn btn-dark" id="saveMethodsBtn" style="margin-top:14px;">Methods সেভ করুন</button>
+    </div>
+
+    <div class="card">
+      <h3 style="margin:0 0 14px;font-size:14.5px;">API Key</h3>
+      <div class="keyval">${brand.apiKey}</div>
+      <div class="rowbtns" style="display:flex;gap:10px;">
+        <button class="btn btn-ghost btn-sm" id="copyKeyBtn">${PL.ICONS.copy} Copy</button>
+        <button class="btn btn-danger btn-sm" id="regenKeyBtn">↻ Regenerate</button>
+      </div>
+    </div>`;
+
+  document.getElementById("methodRows").innerHTML = METHODS.map((m) => `
+    <div class="switch-row">
+      <div class="meta">
+        <div class="methodrow-swatch" style="background:${m.color}">${m.label.charAt(0)}</div>
+        <div>
+          <div style="font-weight:700;font-size:13px;">${m.label}</div>
+          <input type="text" id="num_${m.id}" placeholder="01XXXXXXXXX" value="${brand.numbers[m.id] || ""}"
+                 style="border:1px solid var(--line);border-radius:8px;padding:6px 9px;font-size:12px;margin-top:5px;width:150px;" />
+        </div>
+      </div>
+      <label class="switch"><input type="checkbox" id="en_${m.id}" ${brand.methodsEnabled[m.id] ? "checked" : ""}><span class="slider"></span></label>
+    </div>`).join("");
+
+  document.getElementById("saveProfileBtn").addEventListener("click", async () => {
+    const r = await PL.api(`/brands/${brand.id}`, { method: "POST", body: {
+      name: document.getElementById("editName").value.trim(),
+      logoUrl: document.getElementById("editLogo").value.trim(),
+    }});
+    if (!r.ok) { PL.toast(r.data.error || "সমস্যা হয়েছে।", "bad"); return; }
+    PL.toast("প্রোফাইল আপডেট হয়েছে।", "good");
+    await loadBrands();
+    selectBrand(brand.id);
+  });
+
+  document.getElementById("saveMethodsBtn").addEventListener("click", async () => {
+    const numbers = {}, enabled = {};
+    METHODS.forEach((m) => { numbers[m.id] = document.getElementById(`num_${m.id}`).value.trim(); enabled[m.id] = document.getElementById(`en_${m.id}`).checked; });
+    const r = await PL.api(`/brands/${brand.id}/methods`, { method: "POST", body: { numbers, enabled } });
+    if (!r.ok) { PL.toast(r.data.error || "সমস্যা হয়েছে।", "bad"); return; }
+    PL.toast("Methods আপডেট হয়েছে।", "good");
+    await loadBrands();
+    selectBrand(brand.id);
+  });
+
+  document.getElementById("copyKeyBtn").addEventListener("click", (e) => PL.copyText(brand.apiKey, e.currentTarget));
+  document.getElementById("regenKeyBtn").addEventListener("click", async () => {
+    if (!confirm("Regenerate করলে পুরোনো API key কাজ করবে না। নিশ্চিত?")) return;
+    const r = await PL.api(`/brands/${brand.id}/regenerate-key`, { method: "POST" });
+    if (!r.ok) { PL.toast(r.data.error || "সমস্যা হয়েছে।", "bad"); return; }
+    PL.toast("নতুন API key তৈরি হয়েছে।", "good");
+    await loadBrands();
+    selectBrand(brand.id);
+  });
+}
+
+(async function () {
+  const user = await PL.requireAuth("brand");
+  if (!user) return;
+  await loadBrands();
+
+  document.getElementById("createBtn").addEventListener("click", async () => {
+    const name = document.getElementById("newName").value.trim();
+    const domain = document.getElementById("newDomain").value.trim();
+    if (!name) { PL.toast("Brand নাম দিন।", "bad"); return; }
+    const r = await PL.api("/brands", { method: "POST", body: { name, domain } });
+    if (!r.ok) { PL.toast(r.data.error || "সমস্যা হয়েছে।", "bad"); return; }
+    PL.toast("Brand তৈরি হয়েছে!", "good");
+    document.getElementById("newName").value = "";
+    document.getElementById("newDomain").value = "";
+    await loadBrands();
+    selectBrand(r.data.brand.id);
+  });
+})();
+</script>
+</body>
+</html>
