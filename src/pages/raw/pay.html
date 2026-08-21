@@ -1,0 +1,228 @@
+<!doctype html>
+<html lang="bn">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Payment · PayLink</title>
+<link href="https://fonts.googleapis.com/css2?family=Hind+Siliguri:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/style.css">
+</head>
+<body class="pay-body">
+<div class="shell">
+  <div class="card" id="loadingState"><div class="center-panel"><p>লোড হচ্ছে...</p></div></div>
+
+  <div class="card hidden" id="errorState">
+    <div class="center-panel bad"><div class="icon">✕</div>
+    <h2 id="errorTitle">লিংকটি সঠিক নয়</h2><p id="errorMsg">এই পেমেন্ট লিংকটি খুঁজে পাওয়া যায়নি।</p></div>
+  </div>
+
+  <div class="card hidden" id="selectMethodState">
+    <div class="brandhead" id="brandHead"></div>
+    <div class="select-title"><h2>পেমেন্ট মেথড সিলেক্ট করুন</h2><p>পরিশোধ করতে হবে <span class="amt mono" id="selectAmount">৳0</span></p></div>
+    <div class="method-grid" id="methodGrid"></div>
+  </div>
+
+  <div class="card hidden" id="payState">
+    <div class="brandhead" id="brandHead2"></div>
+    <div class="topline">
+      <div class="timer-pill"><span>লিংক সচল থাকবে</span>&nbsp;<span class="mono" id="timerText">15:00</span></div>
+      <button class="changelink" id="changeMethodBtn" type="button">মেথড পরিবর্তন</button>
+    </div>
+    <form id="verifyForm">
+      <div class="pay-card" id="payCard">
+        <h2>ট্রান্জেকশন আইডি দিন</h2>
+        <input class="trxinput" id="trxId" placeholder="ট্রান্জেকশন আইডি দিন" autocomplete="off" required />
+        <ul class="instr" id="instrList"></ul>
+      </div>
+      <button class="submit" type="submit" id="submitBtn">VERIFY</button>
+    </form>
+  </div>
+
+  <div class="card hidden" id="successState">
+    <div class="center-panel good"><div class="icon">✓</div>
+    <h2>Payment Successful!</h2><p>ধন্যবাদ! আপনার পেমেন্ট সফলভাবে যাচাই হয়েছে।</p>
+    <p class="mono" id="successTrx" style="margin-top:10px;font-size:12px;color:#1B1B2F;"></p>
+    <p id="redirectNote" style="font-size:12px;color:var(--muted);"></p></div>
+  </div>
+
+  <div class="card hidden" id="expiredState">
+    <div class="center-panel bad"><div class="icon">⏱</div>
+    <h2>Link Expired</h2><p>এই পেমেন্ট লিংকটির মেয়াদ শেষ হয়ে গেছে। নতুন লিংক সংগ্রহ করুন।</p></div>
+  </div>
+</div>
+
+<div class="verify-overlay hidden" id="verifyOverlay">
+  <div class="ring"></div>
+  <div class="vlabel">যাচাই করা হচ্ছে...</div>
+</div>
+
+<script src="/assets/app.js"></script>
+<script>
+const el = (id) => document.getElementById(id);
+const qs = new URLSearchParams(location.search);
+const invoiceId = qs.get("id");
+
+const METHOD_META = {
+  bkash: { ussd: "*247#" }, nagad: { ussd: "*167#" }, upay: { ussd: "*268#" }, rocket: { ussd: "*322#" }, cellfin: { ussd: "Cellfin App" },
+};
+
+const states = ["loadingState", "errorState", "selectMethodState", "payState", "successState", "expiredState"];
+function show(id) { states.forEach((s) => el(s).classList.toggle("hidden", s !== id)); }
+
+let invoice = null;
+let pollTimer = null, tickTimer = null;
+
+function brandHeadHtml(brand) {
+  if (!brand) return "";
+  return `${brand.logoUrl ? `<img src="${brand.logoUrl}" />` : ""}<div class="bname">${brand.name}</div>`;
+}
+
+function methodSwatch(m) {
+  return `<div class="swatch" style="background:${m.color}">${m.label.charAt(0)}</div>`;
+}
+
+function buildInstructions(methodId, label, number, amount) {
+  const meta = METHOD_META[methodId] || { ussd: "" };
+  let out = "";
+  out += `<li><span class="dot2"></span><span>${meta.ussd} ব্যবহার করে আপনার ${label} মোবাইল মেনু/অ্যাপে যান।</span></li>`;
+  out += `<li><span class="dot2"></span><span><span class="hl">"Send Money"</span> সিলেক্ট করুন।</span></li>`;
+  out += `<li><span class="dot2"></span><span>প্রাপক নম্বরঃ <span class="hl">${number}</span><button class="copytag" id="copyNumBtn" type="button">Copy</button></span></li>`;
+  out += `<li><span class="dot2"></span><span>টাকার পরিমাণঃ <span class="hl">৳${PL.fmt(amount)}</span></span></li>`;
+  out += `<li><span class="dot2"></span><span>পিন দিয়ে কনফার্ম করুন — একটা কনফার্মেশন SMS পাবেন।</span></li>`;
+  out += `<li><span class="dot2"></span><span>এখন উপরের বক্সে <span class="hl">Transaction ID</span> দিন এবং <span class="hl">VERIFY</span> চাপুন।</span></li>`;
+  return out;
+}
+
+function renderTimer() {
+  if (!invoice) return;
+  const remaining = invoice.expiresAt - Date.now();
+  if (remaining <= 0) {
+    if (invoice.status === "pending") show("expiredState");
+    clearInterval(tickTimer); if (pollTimer) clearInterval(pollTimer);
+    return;
+  }
+  const s = Math.floor(remaining / 1000);
+  el("timerText").textContent = String(Math.floor(s / 60)).padStart(2, "0") + ":" + String(s % 60).padStart(2, "0");
+}
+
+function showSuccess(trxId) {
+  clearInterval(tickTimer); if (pollTimer) clearInterval(pollTimer);
+  el("successTrx").textContent = "Transaction ID: " + trxId;
+  show("successState");
+  if (invoice && invoice.redirectUrl) {
+    el("redirectNote").textContent = "কয়েক সেকেন্ডের মধ্যে রিডাইরেক্ট হচ্ছে...";
+    setTimeout(() => (location.href = invoice.redirectUrl), 2200);
+  }
+}
+
+function enterPayState(methodMeta) {
+  el("brandHead2").innerHTML = brandHeadHtml(invoice.brand);
+  const bg = methodMeta ? methodMeta.color : "#E2136E";
+  el("payCard").style.background = bg;
+  el("submitBtn").style.background = "#181826";
+  el("instrList").innerHTML = buildInstructions(invoice.method, methodMeta ? methodMeta.label : invoice.method, invoice.merchantNumber, invoice.amount);
+  show("payState");
+  renderTimer();
+  tickTimer = setInterval(renderTimer, 1000);
+  pollTimer = setInterval(pollInvoice, 4000);
+}
+
+function loadInvoice() {
+  if (!invoiceId) {
+    el("errorTitle").textContent = "লিংকটি সঠিক নয়";
+    el("errorMsg").textContent = "এই পেমেন্ট লিংকে কোনো Invoice ID পাওয়া যায়নি।";
+    show("errorState");
+    return;
+  }
+  PL.api(`/invoices/${encodeURIComponent(invoiceId)}`).then((r) => {
+    if (!r.ok) {
+      el("errorTitle").textContent = "লিংকটি খুঁজে পাওয়া যায়নি";
+      el("errorMsg").textContent = r.data.error || "Invoice not found.";
+      show("errorState");
+      return;
+    }
+    invoice = r.data;
+    el("selectAmount").textContent = "৳" + PL.fmt(invoice.amount);
+    el("brandHead").innerHTML = brandHeadHtml(invoice.brand);
+    if (invoice.status === "verified") { showSuccess(invoice.trxId); return; }
+    if (invoice.status === "expired") { show("expiredState"); return; }
+    if (!invoice.method) {
+      el("methodGrid").innerHTML = (invoice.availableMethods || []).map((m) =>
+        `<button class="method-card" data-id="${m.id}">${methodSwatch(m)}<span class="name">${m.label}</span></button>`
+      ).join("") || '<p class="empty">এই ব্র্যান্ডে এখনো কোনো পেমেন্ট মেথড চালু নেই।</p>';
+      el("methodGrid").querySelectorAll(".method-card").forEach((btn) => btn.addEventListener("click", () => pickMethod(btn.dataset.id)));
+      show("selectMethodState");
+      return;
+    }
+    const meta = (invoice.availableMethods || []).find((m) => m.id === invoice.method);
+    enterPayState(meta);
+  });
+}
+
+function pickMethod(methodId) {
+  document.querySelectorAll(".method-card").forEach((b) => (b.disabled = true));
+  const prevAvailable = invoice.availableMethods || [];
+  const prevBrand = invoice.brand;
+  PL.api(`/invoices/${encodeURIComponent(invoiceId)}/select-method`, { method: "POST", body: { method: methodId } }).then((r) => {
+    if (!r.ok) {
+      document.querySelectorAll(".method-card").forEach((b) => (b.disabled = false));
+      PL.toast(r.data.error || "সমস্যা হয়েছে।", "bad");
+      return;
+    }
+    invoice = { ...r.data, availableMethods: prevAvailable, brand: r.data.brand || prevBrand };
+    const meta = prevAvailable.find((m) => m.id === methodId);
+    enterPayState(meta);
+  });
+}
+
+function pollInvoice() {
+  if (!invoice) return;
+  PL.api(`/invoices/${encodeURIComponent(invoice.id)}`).then((r) => {
+    if (!r.ok) return;
+    invoice.status = r.data.status;
+    if (r.data.status === "verified") showSuccess(r.data.trxId);
+    else if (r.data.status === "expired") { show("expiredState"); clearInterval(pollTimer); }
+  });
+}
+
+el("verifyForm").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  if (!invoice) return;
+  const trxId = el("trxId").value.trim();
+  el("submitBtn").disabled = true;
+  el("verifyOverlay").classList.remove("hidden");
+
+  const started = Date.now();
+  const result = await PL.api(`/invoices/${encodeURIComponent(invoice.id)}/verify`, { method: "POST", body: { trxId } });
+  const elapsed = Date.now() - started;
+  const remainingWait = Math.max(0, 5000 - elapsed); // always show the ring for ~5s
+  await new Promise((res) => setTimeout(res, remainingWait));
+
+  el("verifyOverlay").classList.add("hidden");
+  el("submitBtn").disabled = false;
+
+  if (result.ok && result.data.status === "verified") {
+    showSuccess(result.data.trxId);
+    return;
+  }
+  if (result.status === 409) {
+    PL.toast(result.data.error || result.data.message, "bad");
+    return;
+  }
+  PL.toast("TrxID পাওয়া যায়নি! আবার চেষ্টা করুন অথবা কিছুক্ষণ অপেক্ষা করুন।", "bad");
+});
+
+el("changeMethodBtn").addEventListener("click", () => {
+  clearInterval(tickTimer); if (pollTimer) clearInterval(pollTimer);
+  invoice.method = null;
+  loadInvoice();
+});
+
+document.addEventListener("click", (e) => {
+  if (e.target && e.target.id === "copyNumBtn") PL.copyText(invoice.merchantNumber, e.target);
+});
+
+loadInvoice();
+</script>
+</body>
+</html>
