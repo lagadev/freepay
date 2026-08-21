@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="bn">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Settings · PayLink</title>
+<link href="https://fonts.googleapis.com/css2?family=Hind+Siliguri:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/style.css">
+</head>
+<body>
+<div id="navSlot"></div>
+<div class="page narrow">
+  <h1 class="pagetitle">Settings</h1>
+  <p class="pagesub">অ্যাকাউন্ট তথ্য এবং সব Brand-এর API key এক জায়গায় ম্যানেজ করুন।</p>
+
+  <div class="card">
+    <h3 style="margin:0 0 14px;font-size:14.5px;">Account</h3>
+    <div class="field"><label>Email</label><input type="email" id="accEmail" disabled /></div>
+    <div class="field"><label>Name</label><input type="text" id="accName" disabled /></div>
+    <p style="font-size:12px;color:var(--muted);">পাসওয়ার্ড পরিবর্তনের ফিচার শীঘ্রই আসছে।</p>
+  </div>
+
+  <div class="card">
+    <h3 style="margin:0 0 14px;font-size:14.5px;">API Keys</h3>
+    <div id="keysList"><div class="empty">লোড হচ্ছে...</div></div>
+  </div>
+</div>
+<script src="/assets/app.js"></script>
+<script>
+(async function () {
+  const user = await PL.requireAuth("settings");
+  if (!user) return;
+  document.getElementById("accEmail").value = user.email;
+  document.getElementById("accName").value = user.name || "—";
+
+  const r = await PL.api("/brands");
+  const brands = (r.ok && r.data.brands) || [];
+  const list = document.getElementById("keysList");
+  if (!brands.length) { list.innerHTML = '<div class="empty">এখনো কোনো Brand তৈরি হয়নি। <a href="/app/brand.html">এখনই তৈরি করুন</a></div>'; return; }
+
+  list.innerHTML = brands.map((b) => `
+    <div style="border-top:1px solid var(--line);padding:14px 0;">
+      <div style="font-weight:700;font-size:13.5px;margin-bottom:8px;">${b.name}</div>
+      <div class="keyval" id="key_${b.id}">${b.apiKey}</div>
+      <div style="display:flex;gap:8px;">
+        <button class="btn btn-ghost btn-sm copybtn" data-key="${b.apiKey}">📋 Copy</button>
+        <button class="btn btn-danger btn-sm regenbtn" data-id="${b.id}">↻ Regenerate</button>
+      </div>
+    </div>`).join("");
+
+  list.querySelectorAll(".copybtn").forEach((btn) => btn.addEventListener("click", () => PL.copyText(btn.dataset.key, btn)));
+  list.querySelectorAll(".regenbtn").forEach((btn) => btn.addEventListener("click", async () => {
+    if (!confirm("Regenerate করলে পুরোনো key কাজ করবে না। নিশ্চিত?")) return;
+    const res = await PL.api(`/brands/${btn.dataset.id}/regenerate-key`, { method: "POST" });
+    if (!res.ok) { PL.toast(res.data.error || "সমস্যা হয়েছে।", "bad"); return; }
+    document.getElementById(`key_${btn.dataset.id}`).textContent = res.data.apiKey;
+    btn.previousElementSibling.dataset.key = res.data.apiKey;
+    PL.toast("নতুন API key তৈরি হয়েছে।", "good");
+  }));
+})();
+</script>
+</body>
+</html>
