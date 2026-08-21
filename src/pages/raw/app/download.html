@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="bn">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Download App · PayLink</title>
+<link href="https://fonts.googleapis.com/css2?family=Hind+Siliguri:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/style.css">
+<style>
+.applogo{width:56px;height:56px;border-radius:16px;background:linear-gradient(135deg,var(--purple),#8B7CF7);display:flex;align-items:center;justify-content:center;color:#fff;font-weight:800;font-size:22px;}
+.applhead{display:flex;gap:16px;align-items:center;}
+.stepitem{display:flex;gap:14px;padding:14px 0;border-top:1px solid var(--line);}
+.stepitem:first-child{border-top:none;}
+.stepnum{width:32px;height:32px;border-radius:10px;background:var(--accent-soft);color:var(--accent);display:flex;align-items:center;justify-content:center;font-weight:800;font-size:13px;flex:none;}
+.notice{background:var(--pend-bg);color:#8A5B00;border-radius:12px;padding:12px 14px;font-size:12.5px;line-height:1.6;margin-top:14px;}
+</style>
+</head>
+<body>
+<div id="navSlot"></div>
+<div class="page narrow">
+  <h1 class="pagetitle">Download App</h1>
+  <p class="pagesub">আপনার পেমেন্ট রিসিভিং ফোনে ইনস্টল করুন — SMS পড়ে অটো-ভেরিফাই করবে।</p>
+
+  <div class="card">
+    <div class="applhead">
+      <div class="applogo">PS</div>
+      <div>
+        <div style="font-weight:800;font-size:16px;">PayLink Sync</div>
+        <div style="font-size:12.5px;color:var(--muted);">অটোমেটেড BDT পেমেন্টের জন্য সবচেয়ে অ্যাডভান্সড SMS সিঙ্ক ইঞ্জিন।</div>
+      </div>
+    </div>
+    <a class="btn btn-primary btn-block" style="margin-top:18px;" id="downloadBtn" href="#">⬇ Download APK</a>
+
+    <div class="notice">ℹ️ অ্যাপে লগইন করার সময় অবশ্যই আপনার ব্র্যান্ড লোগো এবং ব্র্যান্ড নেম চেক করে দেখুন, এবং Android ফোন ব্যবহার করুন।</div>
+  </div>
+
+  <div class="card">
+    <h3 style="margin:0 0 14px;font-size:14.5px;">Sync Credentials</h3>
+    <div class="field">
+      <label>1. Select Target Brand</label>
+      <select id="brandSelect"></select>
+    </div>
+    <label style="font-size:12.5px;font-weight:700;color:var(--muted);">Your Brand API Key</label>
+    <div class="keyval" id="keyVal">—</div>
+    <button class="btn btn-ghost btn-sm" id="copyBtn">📋 Copy</button>
+  </div>
+
+  <div class="card">
+    <h3 style="margin:0 0 4px;font-size:14.5px;">4-Step Quick Setup</h3>
+    <div class="stepitem"><div class="stepnum">1</div><div><b>Install APK</b><div style="font-size:12.5px;color:var(--muted);">উপরের বাটন থেকে ডাউনলোড করে ইনস্টল করুন।</div></div></div>
+    <div class="stepitem"><div class="stepnum">2</div><div><b>Allow Permissions</b><div style="font-size:12.5px;color:var(--muted);">SMS, Notification এবং Battery Optimization permission দিন।</div></div></div>
+    <div class="stepitem"><div class="stepnum">3</div><div><b>Login App</b><div style="font-size:12.5px;color:var(--muted);">উপরের Brand API Key দিয়ে অ্যাপে লগইন করুন।</div></div></div>
+    <div class="stepitem"><div class="stepnum">4</div><div><b>Keep Online</b><div style="font-size:12.5px;color:var(--muted);">২৪/৭ ইন্টারনেট কানেকশন রাখুন এবং অ্যাপটা ব্যাকগ্রাউন্ডে চালু রাখুন।</div></div></div>
+  </div>
+</div>
+<script src="/assets/app.js"></script>
+<script>
+(async function () {
+  const user = await PL.requireAuth("download");
+  if (!user) return;
+
+  const [cfgR, brandsR] = await Promise.all([PL.api("/config/public"), PL.api("/brands")]);
+  if (cfgR.ok && cfgR.data.apkUrl) document.getElementById("downloadBtn").href = cfgR.data.apkUrl;
+  else document.getElementById("downloadBtn").addEventListener("click", (e) => { e.preventDefault(); PL.toast("এখনো APK লিংক সেট করা হয়নি।", "bad"); });
+
+  const brands = (brandsR.ok && brandsR.data.brands) || [];
+  const select = document.getElementById("brandSelect");
+  if (!brands.length) {
+    select.innerHTML = '<option>প্রথমে একটা Brand তৈরি করুন</option>';
+    return;
+  }
+  select.innerHTML = brands.map((b) => `<option value="${b.apiKey}">${b.name}</option>`).join("");
+  const updateKey = () => (document.getElementById("keyVal").textContent = select.value);
+  select.addEventListener("change", updateKey);
+  updateKey();
+
+  document.getElementById("copyBtn").addEventListener("click", (e) => PL.copyText(select.value, e.currentTarget));
+})();
+</script>
+</body>
+</html>
