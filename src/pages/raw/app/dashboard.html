@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="bn">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Dashboard · PayLink</title>
+<link href="https://fonts.googleapis.com/css2?family=Hind+Siliguri:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/style.css">
+</head>
+<body>
+<div id="navSlot"></div>
+<div class="page">
+  <h1 class="pagetitle">Dashboard</h1>
+  <p class="pagesub">আপনার সব ব্র্যান্ডের সামগ্রিক পারফরম্যান্স।</p>
+
+  <div class="balance-card">
+    <div class="lbl">Total Received</div>
+    <div class="amt mono" id="totalReceived">৳0.00</div>
+    <div class="grid4" style="margin-top:18px;">
+      <div class="stat-box" style="background:rgba(255,255,255,.08);border-color:transparent;color:#fff;">
+        <div class="l" style="color:#ABA6D6;">Today</div><div class="v mono" id="statToday">৳0</div>
+      </div>
+      <div class="stat-box" style="background:rgba(255,255,255,.08);border-color:transparent;color:#fff;">
+        <div class="l" style="color:#ABA6D6;">Monthly</div><div class="v mono" id="statMonth">৳0</div>
+      </div>
+      <div class="stat-box" style="background:rgba(255,255,255,.08);border-color:transparent;color:#fff;">
+        <div class="l" style="color:#ABA6D6;">Total Volume</div><div class="v mono" id="statVolume">৳0</div>
+      </div>
+      <div class="stat-box" style="background:rgba(255,255,255,.08);border-color:transparent;color:#fff;">
+        <div class="l" style="color:#ABA6D6;">Transactions</div><div class="v mono" id="statCount">0</div>
+      </div>
+    </div>
+  </div>
+
+  <h2 style="font-size:15px;margin:26px 0 10px;">Recent Transactions</h2>
+  <div class="card" style="padding:0;overflow-x:auto;">
+    <table class="tx" id="txTable">
+      <thead><tr><th>Invoice</th><th>Brand</th><th>Method</th><th>Amount</th><th>Status</th><th>Date</th></tr></thead>
+      <tbody id="txBody"><tr><td colspan="6" class="empty">লোড হচ্ছে...</td></tr></tbody>
+    </table>
+  </div>
+</div>
+<script src="/assets/app.js"></script>
+<script>
+(async function () {
+  const user = await PL.requireAuth("dashboard");
+  if (!user) return;
+
+  const [statsR, txR] = await Promise.all([PL.api("/me/stats"), PL.api("/me/transactions?limit=15")]);
+  if (statsR.ok) {
+    const s = statsR.data;
+    document.getElementById("totalReceived").textContent = "৳" + PL.fmt(s.totalReceived);
+    document.getElementById("statToday").textContent = "৳" + PL.fmt(s.today);
+    document.getElementById("statMonth").textContent = "৳" + PL.fmt(s.month);
+    document.getElementById("statVolume").textContent = "৳" + PL.fmt(s.totalVolume);
+    document.getElementById("statCount").textContent = s.transactionCount;
+  }
+
+  const body = document.getElementById("txBody");
+  const rows = (txR.ok && txR.data.transactions) || [];
+  if (!rows.length) {
+    body.innerHTML = '<tr><td colspan="6" class="empty">এখনো কোনো ট্রানজেকশন নেই।</td></tr>';
+    return;
+  }
+  body.innerHTML = rows.map((t) => `
+    <tr>
+      <td class="mono">${t.id}${t.reference ? " · " + t.reference : ""}</td>
+      <td>${t.brand_name}</td>
+      <td>${t.method || "—"}</td>
+      <td class="mono">৳${PL.fmt(t.amount)}</td>
+      <td><span class="badge ${t.status}">${t.status.toUpperCase()}</span></td>
+      <td>${PL.fmtDate(t.created_at)}</td>
+    </tr>`).join("");
+})();
+</script>
+</body>
+</html>
