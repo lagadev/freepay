@@ -1,0 +1,15 @@
+{
+  "name": "freepay",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "build:pages": "node build-pages.js",
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "db:migrate": "wrangler d1 execute freepay-db --file=./schema.sql",
+    "db:migrate:remote": "wrangler d1 execute freepay-db --remote --file=./schema.sql"
+  },
+  "devDependencies": {
+    "wrangler": "^3.78.0"
+  }
+}
