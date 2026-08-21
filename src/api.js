@@ -35,7 +35,7 @@ const METHODS = [
 const METHOD_IDS = METHODS.map((m) => m.id);
 
 const AMOUNT_TOLERANCE = 0.5;
-const PBKDF2_ITERATIONS = 120000;
+const PBKDF2_ITERATIONS = 100000;
 
 function corsHeaders() {
   return {
