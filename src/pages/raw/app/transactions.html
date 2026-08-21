@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="bn">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Transactions · PayLink</title>
+<link href="https://fonts.googleapis.com/css2?family=Hind+Siliguri:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/style.css">
+</head>
+<body>
+<div id="navSlot"></div>
+<div class="page">
+  <h1 class="pagetitle">Recent Transactions</h1>
+  <p class="pagesub" id="countLabel">0 Records</p>
+
+  <div class="card" style="padding:0;overflow-x:auto;">
+    <table class="tx" id="txTable">
+      <thead><tr><th>Invoice</th><th>Brand</th><th>Method</th><th>Amount</th><th>Status</th></tr></thead>
+      <tbody id="txBody"><tr><td colspan="5" class="empty">লোড হচ্ছে...</td></tr></tbody>
+    </table>
+  </div>
+</div>
+<script src="/assets/app.js"></script>
+<script>
+(async function () {
+  const user = await PL.requireAuth("transactions");
+  if (!user) return;
+  const r = await PL.api("/me/transactions?limit=200");
+  const rows = (r.ok && r.data.transactions) || [];
+  document.getElementById("countLabel").textContent = rows.length + " Records";
+  const body = document.getElementById("txBody");
+  if (!rows.length) { body.innerHTML = '<tr><td colspan="5" class="empty">No records found.</td></tr>'; return; }
+  body.innerHTML = rows.map((t) => `
+    <tr>
+      <td class="mono">${t.id}${t.reference ? " · " + t.reference : ""}<br><span style="color:var(--muted);font-size:11px;">${PL.fmtDate(t.created_at)}</span></td>
+      <td>${t.brand_name}</td>
+      <td>${t.method || "—"}</td>
+      <td class="mono">৳${PL.fmt(t.amount)}</td>
+      <td><span class="badge ${t.status}">${t.status.toUpperCase()}</span></td>
+    </tr>`).join("");
+})();
+</script>
+</body>
+</html>
