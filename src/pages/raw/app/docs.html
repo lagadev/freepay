@@ -1,0 +1,143 @@
+<!doctype html>
+<html lang="bn">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Documentation · PayLink</title>
+<link href="https://fonts.googleapis.com/css2?family=Hind+Siliguri:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/style.css">
+<style>
+.toc{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 26px;}
+.toc a{background:var(--chip);color:var(--text);font-size:12px;padding:7px 12px;border-radius:999px;font-weight:700;}
+section.doc{margin-bottom:34px;scroll-margin-top:80px;}
+section.doc h2{font-size:17px;margin:0 0 10px;display:flex;align-items:center;gap:9px;}
+section.doc h2 .tag{font-size:10px;padding:3px 9px;border-radius:999px;font-weight:800;}
+.tag.get{background:#E3F2FD;color:#1565C0;}
+.tag.post{background:var(--good-bg);color:var(--good);}
+.tag.auth{background:var(--bad-bg);color:var(--bad);}
+</style>
+</head>
+<body>
+<div id="navSlot"></div>
+<div class="page">
+  <h1 class="pagetitle">Developer Documentation</h1>
+  <p class="pagesub">প্রতিটা Brand-এর নিজস্ব API key দিয়ে ইনভয়েস তৈরি করুন — টাকা সরাসরি সেই Brand-এর নিজের নাম্বারে যায়।</p>
+
+  <div class="toc">
+    <a href="#auth">Authentication</a><a href="#node-init">Payment Initiation (Node.js)</a><a href="#node-webhook">Webhook Listener (Node.js)</a>
+    <a href="#status">Status চেক</a><a href="#select">Method Select</a><a href="#verify">Verify</a><a href="#sms">SMS Ingest</a><a href="#errors">Error Codes</a>
+  </div>
+
+  <section class="doc" id="auth">
+    <h2>Authentication <span class="tag auth">Bearer Key</span></h2>
+    <p style="color:var(--muted);font-size:13.5px;">প্রতিটা Brand-এর নিজস্ব API key আছে (Brand পেজে পাবেন)। ইনভয়েস তৈরি ও SMS ingest — দুটোতেই এই key লাগবে:</p>
+    <pre>Authorization: Bearer YOUR_BRAND_API_KEY</pre>
+  </section>
+
+  <section class="doc" id="node-init">
+    <h2>Payment Initiation <span class="tag post">Node.js</span></h2>
+    <pre>const express = require('express');
+const axios = require('axios');
+const db = require('./db');
+const app = express();
+app.use(express.urlencoded({ extended: true }));
+
+app.post('/pay', async (req, res) => {
+    const { amount } = req.body;
+    const order_id = "ORD-" + Date.now();
+
+    const api_key = "YOUR_BRAND_API_KEY";
+    const api_url = "https://your-worker.workers.dev/api/invoices";
+
+    try {
+        const response = await axios.post(api_url, {
+            amount,
+            reference: order_id,
+            callbackUrl: "https://yourdomain.com/callback",
+            redirectUrl: "https://yourdomain.com/success?id=" + order_id,
+        }, {
+            headers: { Authorization: `Bearer ${api_key}` }
+        });
+
+        await db.execute("INSERT INTO payments (order_id, amount) VALUES (?, ?)", [order_id, amount]);
+        res.redirect(response.data.payUrl);
+    } catch (error) {
+        res.status(500).send("API Error");
+    }
+});</pre>
+  </section>
+
+  <section class="doc" id="node-webhook">
+    <h2>Webhook Listener <span class="tag post">Node.js</span></h2>
+    <p style="color:var(--muted);font-size:13.5px;">ইনভয়েস verified হলে <code class="inline">callbackUrl</code>-এ signed POST যায়। ব্যালেন্স/অর্ডার আপডেট করার আগে অবশ্যই <code class="inline">X-Signature</code> ভেরিফাই করুন।</p>
+    <pre>const crypto = require('crypto');
+app.use(express.json());
+
+app.post('/callback', async (req, res) => {
+    const raw = JSON.stringify(req.body);
+    const expected = crypto.createHmac('sha256', process.env.BRAND_API_KEY)
+        .update(raw).digest('hex');
+
+    if (req.headers['x-signature'] !== expected) {
+        return res.status(401).send('bad signature');
+    }
+
+    const { event, order_id, status, trxId } = { event: req.body.event, order_id: req.body.reference, status: 'paid', trxId: req.body.trxId };
+    if (event === 'invoice.verified') {
+        const [rows] = await db.execute("SELECT status FROM payments WHERE order_id = ?", [order_id]);
+        if (rows.length && rows[0].status !== 'paid') {
+            await db.execute("UPDATE payments SET status='paid', txn_id=? WHERE order_id=?", [trxId, order_id]);
+        }
+    }
+    res.sendStatus(200);
+});</pre>
+  </section>
+
+  <section class="doc" id="status">
+    <h2>Invoice Status <span class="tag get">GET</span></h2>
+    <div class="keyval" style="color:var(--text);">GET /api/invoices/:id</div>
+    <p style="color:var(--muted);font-size:13.5px;">পাবলিক endpoint। <code class="inline">status</code>: pending / verified / expired।</p>
+  </section>
+
+  <section class="doc" id="select">
+    <h2>Select Payment Method <span class="tag post">POST</span></h2>
+    <div class="keyval" style="color:var(--text);">POST /api/invoices/:id/select-method</div>
+    <pre>{ "method": "bkash" }</pre>
+  </section>
+
+  <section class="doc" id="verify">
+    <h2>Verify Transaction ID <span class="tag post">POST</span></h2>
+    <div class="keyval" style="color:var(--text);">POST /api/invoices/:id/verify</div>
+    <pre>{ "trxId": "8N7A1B2C3D", "senderNumber": "01712345678" }</pre>
+    <p style="color:var(--muted);font-size:13.5px;">TrxID শুধু তখনই ম্যাচ করবে যদি এটি এই ইনভয়েসের নিজের ১৫ মিনিটের উইন্ডোর মধ্যে আসা SMS-এর সাথে মেলে — অর্থাৎ শেষ ১৫ মিনিটে "verify" হওয়া লাগবে।</p>
+  </section>
+
+  <section class="doc" id="sms">
+    <h2>SMS Ingest <span class="tag post">POST</span></h2>
+    <div class="keyval" style="color:var(--text);">POST /api/sms/ingest</div>
+    <pre>{
+  "trxId": "8N7A1B2C3D",
+  "amount": 500,
+  "method": "bkash",
+  "senderNumber": "01712345678",
+  "receivedAt": 1735000000000,
+  "rawSms": "You have received Tk 500.00 from ..."
+}</pre>
+    <p style="color:var(--muted);font-size:13.5px;">PayLink Sync অ্যাপ প্রতিটা কনফার্মেশন SMS পেলেই এখানে পাঠায়। একই Brand-এ একই trxId দ্বিতীয়বার এলে চুপচাপ ignore হয়ে যায় — replay-safe।</p>
+  </section>
+
+  <section class="doc" id="errors">
+    <h2>Error Codes</h2>
+    <table class="tx"><tr><th>Status</th><th>মানে</th></tr>
+      <tr><td>400</td><td>প্রয়োজনীয় ফিল্ড নেই বা মেথড এনেবল/নাম্বার সেট করা নেই।</td></tr>
+      <tr><td>401</td><td>API key ভুল বা নেই।</td></tr>
+      <tr><td>403</td><td>Brand ডিজেবল করা আছে।</td></tr>
+      <tr><td>404</td><td>Invoice পাওয়া যায়নি।</td></tr>
+      <tr><td>409</td><td>Invoice expired অথবা TrxID আগেই ব্যবহার হয়েছে।</td></tr>
+    </table>
+  </section>
+</div>
+<script src="/assets/app.js"></script>
+<script>PL.requireAuth("docs");</script>
+</body>
+</html>
