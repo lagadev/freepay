@@ -1,0 +1,172 @@
+<!doctype html>
+<html lang="bn">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Admin Panel · PayLink</title>
+<link href="https://fonts.googleapis.com/css2?family=Hind+Siliguri:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/style.css">
+<style>
+.tabs{display:flex;gap:8px;margin-bottom:20px;overflow-x:auto;}
+.tabbtn{background:var(--card);border:1px solid var(--line);border-radius:11px;padding:9px 16px;font-weight:700;font-size:12.5px;cursor:pointer;white-space:nowrap;}
+.tabbtn.active{background:var(--navy);color:#fff;border-color:var(--navy);}
+.tabpanel{display:none;}
+.tabpanel.active{display:block;}
+.methodtogglegrid{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;}
+.methodtoggle{display:flex;align-items:center;gap:6px;background:var(--chip);border-radius:10px;padding:6px 10px;font-size:11.5px;font-weight:700;}
+</style>
+</head>
+<body>
+<div id="navSlot"></div>
+<div class="page">
+  <h1 class="pagetitle">Admin Panel</h1>
+  <p class="pagesub">সাইটের প্রতিটা ইউজার, ব্র্যান্ড, এবং ট্রানজেকশন এখান থেকে সম্পূর্ণ নিয়ন্ত্রণ করুন।</p>
+
+  <div class="grid4" id="statGrid">
+    <div class="stat-box"><div class="l">Users</div><div class="v" id="stUsers">—</div></div>
+    <div class="stat-box"><div class="l">Brands</div><div class="v" id="stBrands">—</div></div>
+    <div class="stat-box"><div class="l">Verified Volume</div><div class="v mono" id="stVolume">—</div></div>
+    <div class="stat-box"><div class="l">Verified Count</div><div class="v" id="stVerified">—</div></div>
+  </div>
+
+  <div class="tabs" style="margin-top:24px;">
+    <button class="tabbtn active" data-tab="users">Users</button>
+    <button class="tabbtn" data-tab="brands">Brands</button>
+    <button class="tabbtn" data-tab="tx">Transactions</button>
+    <button class="tabbtn" data-tab="config">Site Config</button>
+  </div>
+
+  <div class="tabpanel active" id="tab-users">
+    <div class="card" style="padding:0;overflow-x:auto;">
+      <table class="tx"><thead><tr><th>Email</th><th>Name</th><th>Joined</th><th>Status</th><th></th></tr></thead>
+        <tbody id="usersBody"><tr><td colspan="5" class="empty">লোড হচ্ছে...</td></tr></tbody></table>
+    </div>
+  </div>
+
+  <div class="tabpanel" id="tab-brands">
+    <div id="brandsBody"><div class="empty">লোড হচ্ছে...</div></div>
+  </div>
+
+  <div class="tabpanel" id="tab-tx">
+    <div class="card" style="padding:0;overflow-x:auto;">
+      <table class="tx"><thead><tr><th>Invoice</th><th>Brand</th><th>Owner</th><th>Method</th><th>Amount</th><th>Status</th></tr></thead>
+        <tbody id="adminTxBody"><tr><td colspan="6" class="empty">লোড হচ্ছে...</td></tr></tbody></table>
+    </div>
+  </div>
+
+  <div class="tabpanel" id="tab-config">
+    <div class="card">
+      <h3 style="margin:0 0 14px;font-size:14.5px;">App Download</h3>
+      <div class="field"><label>APK Download URL</label><input type="text" id="cfgApkUrl" placeholder="https://.../paylink-sync.apk" /></div>
+    </div>
+    <div class="card">
+      <h3 style="margin:0 0 14px;font-size:14.5px;">Donate</h3>
+      <div class="grid2">
+        <div class="field"><label>bKash নাম্বার</label><input type="text" id="cfgDonateBkash" placeholder="01XXXXXXXXX" /></div>
+        <div class="field"><label>Nagad নাম্বার</label><input type="text" id="cfgDonateNagad" placeholder="01XXXXXXXXX" /></div>
+      </div>
+      <div class="field"><label>Note (ঐচ্ছিক)</label><input type="text" id="cfgDonateNote" placeholder="ধন্যবাদ বার্তা..." /></div>
+    </div>
+    <button class="btn btn-primary" id="saveConfigBtn">সেভ করুন</button>
+  </div>
+</div>
+<script src="/assets/app.js"></script>
+<script>
+const METHODS = ["bkash", "nagad", "upay", "rocket", "cellfin"];
+
+document.querySelectorAll(".tabbtn").forEach((btn) => btn.addEventListener("click", () => {
+  document.querySelectorAll(".tabbtn").forEach((b) => b.classList.remove("active"));
+  document.querySelectorAll(".tabpanel").forEach((p) => p.classList.remove("active"));
+  btn.classList.add("active");
+  document.getElementById("tab-" + btn.dataset.tab).classList.add("active");
+}));
+
+async function loadStats() {
+  const r = await PL.api("/admin/stats");
+  if (!r.ok) return;
+  document.getElementById("stUsers").textContent = r.data.users;
+  document.getElementById("stBrands").textContent = r.data.brands;
+  document.getElementById("stVolume").textContent = "৳" + PL.fmt(r.data.verifiedVolume);
+  document.getElementById("stVerified").textContent = r.data.verifiedCount;
+}
+
+async function loadUsers() {
+  const r = await PL.api("/admin/users");
+  const body = document.getElementById("usersBody");
+  const rows = (r.ok && r.data.users) || [];
+  if (!rows.length) { body.innerHTML = '<tr><td colspan="5" class="empty">No users.</td></tr>'; return; }
+  body.innerHTML = rows.map((u) => `
+    <tr>
+      <td>${u.email}</td><td>${u.name || "—"}</td><td>${PL.fmtDate(u.created_at)}</td>
+      <td><span class="badge ${u.suspended ? "expired" : "verified"}">${u.suspended ? "SUSPENDED" : "ACTIVE"}</span></td>
+      <td><button class="btn btn-sm ${u.suspended ? "btn-good" : "btn-danger"}" data-id="${u.id}" data-suspend="${u.suspended ? 0 : 1}">${u.suspended ? "Unsuspend" : "Suspend"}</button></td>
+    </tr>`).join("");
+  body.querySelectorAll("button[data-id]").forEach((btn) => btn.addEventListener("click", async () => {
+    const r2 = await PL.api(`/admin/users/${btn.dataset.id}/toggle`, { method: "POST", body: { suspended: btn.dataset.suspend === "1" } });
+    if (r2.ok) { PL.toast("আপডেট হয়েছে।", "good"); loadUsers(); } else PL.toast(r2.data.error || "সমস্যা হয়েছে।", "bad");
+  }));
+}
+
+async function loadBrands() {
+  const r = await PL.api("/admin/brands");
+  const wrap = document.getElementById("brandsBody");
+  const rows = (r.ok && r.data.brands) || [];
+  if (!rows.length) { wrap.innerHTML = '<div class="empty">No brands.</div>'; return; }
+  wrap.innerHTML = rows.map((b) => `
+    <div class="card">
+      <div style="display:flex;justify-content:space-between;align-items:center;">
+        <div><b>${b.name}</b> <span style="color:var(--muted);font-size:12px;">· ${b.ownerEmail}</span><div style="font-size:11.5px;color:var(--muted);">${b.domain || "no domain"}</div></div>
+        <label class="switch"><input type="checkbox" class="brandToggle" data-id="${b.id}" ${b.enabled ? "checked" : ""}><span class="slider"></span></label>
+      </div>
+      <div class="methodtogglegrid">
+        ${METHODS.map((m) => `<label class="methodtoggle"><input type="checkbox" class="methodToggle" data-brand="${b.id}" data-method="${m}" ${b.methodsEnabled[m] ? "checked" : ""}/> ${m}</label>`).join("")}
+      </div>
+    </div>`).join("");
+
+  wrap.querySelectorAll(".brandToggle").forEach((el) => el.addEventListener("change", async () => {
+    const r2 = await PL.api(`/admin/brands/${el.dataset.id}/toggle`, { method: "POST", body: { enabled: el.checked } });
+    PL.toast(r2.ok ? "আপডেট হয়েছে।" : (r2.data.error || "সমস্যা হয়েছে।"), r2.ok ? "good" : "bad");
+  }));
+  wrap.querySelectorAll(".methodToggle").forEach((el) => el.addEventListener("change", async () => {
+    const r2 = await PL.api(`/admin/brands/${el.dataset.brand}/methods/${el.dataset.method}/toggle`, { method: "POST", body: { enabled: el.checked } });
+    PL.toast(r2.ok ? "আপডেট হয়েছে।" : (r2.data.error || "সমস্যা হয়েছে।"), r2.ok ? "good" : "bad");
+  }));
+}
+
+async function loadTx() {
+  const r = await PL.api("/admin/transactions?limit=100");
+  const body = document.getElementById("adminTxBody");
+  const rows = (r.ok && r.data.transactions) || [];
+  if (!rows.length) { body.innerHTML = '<tr><td colspan="6" class="empty">No records found.</td></tr>'; return; }
+  body.innerHTML = rows.map((t) => `
+    <tr><td class="mono">${t.id}</td><td>${t.brand_name}</td><td>${t.owner_email}</td><td>${t.method || "—"}</td>
+    <td class="mono">৳${PL.fmt(t.amount)}</td><td><span class="badge ${t.status}">${t.status.toUpperCase()}</span></td></tr>`).join("");
+}
+
+async function loadConfig() {
+  const r = await PL.api("/config/public");
+  if (!r.ok) return;
+  document.getElementById("cfgApkUrl").value = r.data.apkUrl || "";
+  document.getElementById("cfgDonateBkash").value = r.data.donateBkash || "";
+  document.getElementById("cfgDonateNagad").value = r.data.donateNagad || "";
+  document.getElementById("cfgDonateNote").value = r.data.donateNote || "";
+}
+
+document.getElementById("saveConfigBtn").addEventListener("click", async () => {
+  const r = await PL.api("/admin/config", { method: "POST", body: {
+    apk_url: document.getElementById("cfgApkUrl").value.trim(),
+    donate_bkash: document.getElementById("cfgDonateBkash").value.trim(),
+    donate_nagad: document.getElementById("cfgDonateNagad").value.trim(),
+    donate_note: document.getElementById("cfgDonateNote").value.trim(),
+  }});
+  PL.toast(r.ok ? "সেভ হয়েছে।" : (r.data.error || "সমস্যা হয়েছে।"), r.ok ? "good" : "bad");
+});
+
+(async function () {
+  const user = await PL.requireAdmin("admin");
+  if (!user) return;
+  loadStats(); loadUsers(); loadBrands(); loadTx(); loadConfig();
+})();
+</script>
+</body>
+</html>
