@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="bn">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>PayLink — নিজের bKash/Nagad নাম্বার দিয়ে পেমেন্ট গেটওয়ে</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Hind+Siliguri:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/style.css">
+<style>
+.lwrap{max-width:980px;margin:0 auto;padding:0 20px;}
+.lnav{display:flex;align-items:center;justify-content:space-between;padding:22px 0;}
+.lnav .logo{font-weight:800;font-size:19px;}
+.lnav .logo span{color:var(--accent);}
+.lnav .links{display:flex;gap:10px;}
+.hero{padding:60px 0 44px;text-align:center;}
+.hero h1{font-size:clamp(26px,5vw,44px);line-height:1.25;margin:0 0 16px;}
+.hero h1 span{color:var(--accent);}
+.hero p{color:var(--muted);font-size:15.5px;max-width:580px;margin:0 auto 30px;line-height:1.75;}
+.ctas{display:flex;gap:12px;justify-content:center;flex-wrap:wrap;}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:16px;padding:20px 0 50px;}
+.feat .ico{width:42px;height:42px;border-radius:13px;background:var(--accent-soft);display:flex;align-items:center;justify-content:center;margin-bottom:14px;color:var(--accent);}
+.feat h3{font-size:15px;margin:0 0 8px;}
+.feat p{font-size:13px;color:var(--muted);margin:0;line-height:1.65;}
+.methodsband{display:flex;gap:10px;justify-content:center;flex-wrap:wrap;padding:6px 0 50px;}
+.mpill{background:var(--card);border:1px solid var(--line);border-radius:999px;padding:9px 18px;font-size:12.5px;font-weight:700;}
+.ownership{background:var(--navy);color:#fff;border-radius:22px;padding:28px 26px;margin:0 0 56px;}
+.ownership h3{margin:0 0 10px;font-size:16px;}
+.ownership p{margin:0;font-size:13.5px;color:#C7C4E0;line-height:1.75;}
+footer.site{text-align:center;padding:30px 0 50px;color:#A7ABC0;font-size:12.5px;}
+</style>
+</head>
+<body>
+<div class="lwrap">
+  <div class="lnav">
+    <div class="logo">Pay<span>Link</span></div>
+    <div class="links">
+      <a class="btn btn-ghost btn-sm" href="/app/login.html">লগইন</a>
+      <a class="btn btn-primary btn-sm" href="/app/signup.html">ফ্রি অ্যাকাউন্ট খুলুন</a>
+    </div>
+  </div>
+
+  <div class="hero">
+    <h1>একাধিক ব্র্যান্ড, নিজের bKash/Nagad/Upay/Rocket/Cellfin নাম্বার দিয়ে<br/><span>ইনস্ট্যান্ট অটো-ভেরিফাইড</span> পেমেন্ট কালেকশন</h1>
+    <p>প্রতিটা ব্র্যান্ডের জন্য নিজের মোবাইল ওয়ালেট নাম্বার কানেক্ট করুন — কাস্টমারের টাকা সরাসরি আপনার নিজের অ্যাকাউন্টে যায়, PayLink কখনো আপনার টাকা হাতে রাখে না।</p>
+    <div class="ctas">
+      <a class="btn btn-primary" href="/app/signup.html">ফ্রি অ্যাকাউন্ট খুলুন</a>
+      <a class="btn btn-ghost" href="/app/docs.html">Developer Docs</a>
+    </div>
+  </div>
+
+  <div class="methodsband">
+    <div class="mpill" style="color:#E2136E">bKash</div>
+    <div class="mpill" style="color:#F0561F">Nagad</div>
+    <div class="mpill" style="color:#7A1FA2">Upay</div>
+    <div class="mpill" style="color:#8C1AF6">Rocket</div>
+    <div class="mpill" style="color:#0A6E4E">Cellfin</div>
+  </div>
+
+  <div class="grid">
+    <div class="card feat"><div class="ico">⏱</div><h3>১৫ মিনিটের ভেরিফিকেশন উইন্ডো</h3><p>প্রতিটা ইনভয়েস নির্দিষ্ট সময়ের জন্য সচল থাকে; TrxID শুধু সেই উইন্ডোর মধ্যে আসা SMS-এর সাথেই ম্যাচ করে।</p></div>
+    <div class="card feat"><div class="ico">📩</div><h3>নিজের ফোনের SMS দিয়ে অটো-ভেরিফাই</h3><p>PayLink Sync অ্যাপ আপনার কনফার্মেশন SMS পড়ে TrxID মিলিয়ে স্বয়ংক্রিয়ভাবে ভেরিফাই করে।</p></div>
+    <div class="card feat"><div class="ico">🔗</div><h3>মাল্টি-ব্র্যান্ড সাপোর্ট</h3><p>একাধিক সাইট/ব্র্যান্ড, প্রতিটার জন্য আলাদা নাম্বার, আলাদা API key, আলাদা লোগো।</p></div>
+    <div class="card feat"><div class="ico">🛡</div><h3>Replay-Safe & Webhook</h3><p>একটা Transaction ID একবারই ব্যবহার হয়; ভেরিফাই হওয়া মাত্র signed webhook যায়।</p></div>
+  </div>
+
+  <div class="ownership">
+    <h3>🛡 আপনার টাকা সবসময় আপনার নিজের অ্যাকাউন্টে</h3>
+    <p>কাস্টমার সরাসরি আপনার ব্র্যান্ডের নিজের bKash/Nagad/Upay/Rocket/Cellfin নাম্বারে টাকা পাঠায় — PayLink শুধু সেই পেমেন্টটা নিশ্চিত করে জানিয়ে দেয়। তাই এখানে কোনো "withdraw" ধাপ নেই।</p>
+  </div>
+
+  <footer class="site">Built on Cloudflare · আপনার টাকা সবসময় আপনার নিজের নাম্বারেই থাকে</footer>
+</div>
+</body>
+</html>
