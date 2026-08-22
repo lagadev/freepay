@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Documentation · PayLink</title>
+<title>Documentation · FreePay</title>
 <link href="https://fonts.googleapis.com/css2?family=Hind+Siliguri:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/assets/style.css">
 <style>
@@ -24,7 +24,7 @@ section.doc h2 .tag{font-size:10px;padding:3px 9px;border-radius:999px;font-weig
   <p class="pagesub">প্রতিটা Brand-এর নিজস্ব API key দিয়ে ইনভয়েস তৈরি করুন — টাকা সরাসরি সেই Brand-এর নিজের নাম্বারে যায়।</p>
 
   <div class="toc">
-    <a href="#auth">Authentication</a><a href="#node-init">Payment Initiation (Node.js)</a><a href="#node-webhook">Webhook Listener (Node.js)</a>
+    <a href="#auth">Authentication</a><a href="#create">Create Invoice</a><a href="#webhook">Webhook Listener</a>
     <a href="#status">Status চেক</a><a href="#select">Method Select</a><a href="#verify">Verify</a><a href="#sms">SMS Ingest</a><a href="#errors">Error Codes</a>
   </div>
 
@@ -34,43 +34,132 @@ section.doc h2 .tag{font-size:10px;padding:3px 9px;border-radius:999px;font-weig
     <pre>Authorization: Bearer YOUR_BRAND_API_KEY</pre>
   </section>
 
-  <section class="doc" id="node-init">
-    <h2>Payment Initiation <span class="tag post">Node.js</span></h2>
-    <pre>const express = require('express');
+  <section class="doc" id="create">
+    <h2>Create Invoice <span class="tag post">POST /api/invoices</span></h2>
+    <p style="color:var(--muted);font-size:13.5px;">আপনার নিজের সার্ভার থেকে কল করুন। <code class="inline">payUrl</code> কাস্টমারকে পাঠান।</p>
+    <div class="codetabs" data-group="create">
+      <button class="codetab active" data-lang="curl">cURL</button>
+      <button class="codetab" data-lang="node">Node.js</button>
+      <button class="codetab" data-lang="python">Python</button>
+      <button class="codetab" data-lang="php">PHP</button>
+    </div>
+
+    <div class="codepanel active" data-group="create" data-lang="curl">
+      <pre>curl -X POST https://your-worker.workers.dev/api/invoices \
+  -H "Authorization: Bearer YOUR_BRAND_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "amount": 500,
+    "reference": "ORD-1001",
+    "callbackUrl": "https://yourdomain.com/callback",
+    "redirectUrl": "https://yourdomain.com/success?id=ORD-1001"
+  }'</pre>
+    </div>
+
+    <div class="codepanel" data-group="create" data-lang="node">
+      <pre>const express = require('express');
 const axios = require('axios');
-const db = require('./db');
 const app = express();
 app.use(express.urlencoded({ extended: true }));
+
+const API_KEY = "YOUR_BRAND_API_KEY";
+const API_URL = "https://your-worker.workers.dev/api/invoices";
 
 app.post('/pay', async (req, res) => {
     const { amount } = req.body;
     const order_id = "ORD-" + Date.now();
 
-    const api_key = "YOUR_BRAND_API_KEY";
-    const api_url = "https://your-worker.workers.dev/api/invoices";
-
     try {
-        const response = await axios.post(api_url, {
+        const response = await axios.post(API_URL, {
             amount,
             reference: order_id,
             callbackUrl: "https://yourdomain.com/callback",
             redirectUrl: "https://yourdomain.com/success?id=" + order_id,
         }, {
-            headers: { Authorization: `Bearer ${api_key}` }
+            headers: { Authorization: `Bearer ${API_KEY}` }
         });
 
-        await db.execute("INSERT INTO payments (order_id, amount) VALUES (?, ?)", [order_id, amount]);
         res.redirect(response.data.payUrl);
     } catch (error) {
         res.status(500).send("API Error");
     }
 });</pre>
+    </div>
+
+    <div class="codepanel" data-group="create" data-lang="python">
+      <pre>import time
+import requests
+from flask import Flask, request, redirect
+
+app = Flask(__name__)
+
+API_KEY = "YOUR_BRAND_API_KEY"
+API_URL = "https://your-worker.workers.dev/api/invoices"
+
+@app.route("/pay", methods=["POST"])
+def pay():
+    amount = request.form["amount"]
+    order_id = f"ORD-{int(time.time() * 1000)}"
+
+    resp = requests.post(API_URL, json={
+        "amount": amount,
+        "reference": order_id,
+        "callbackUrl": "https://yourdomain.com/callback",
+        "redirectUrl": f"https://yourdomain.com/success?id={order_id}",
+    }, headers={"Authorization": f"Bearer {API_KEY}"})
+
+    data = resp.json()
+    if resp.ok:
+        return redirect(data["payUrl"])
+    return f"API Error: {data.get('error')}", 500</pre>
+    </div>
+
+    <div class="codepanel" data-group="create" data-lang="php">
+      <pre>&lt;?php
+$apiKey = "YOUR_BRAND_API_KEY";
+$apiUrl = "https://your-worker.workers.dev/api/invoices";
+$orderId = "ORD-" . round(microtime(true) * 1000);
+
+$payload = json_encode([
+    "amount" => $_POST["amount"],
+    "reference" => $orderId,
+    "callbackUrl" => "https://yourdomain.com/callback",
+    "redirectUrl" => "https://yourdomain.com/success?id=" . $orderId,
+]);
+
+$ch = curl_init($apiUrl);
+curl_setopt_array($ch, [
+    CURLOPT_POST => true,
+    CURLOPT_POSTFIELDS => $payload,
+    CURLOPT_HTTPHEADER => [
+        "Authorization: Bearer $apiKey",
+        "Content-Type: application/json",
+    ],
+    CURLOPT_RETURNTRANSFER => true,
+]);
+$response = json_decode(curl_exec($ch), true);
+curl_close($ch);
+
+if (isset($response["payUrl"])) {
+    header("Location: " . $response["payUrl"]);
+    exit;
+}
+http_response_code(500);
+echo "API Error: " . ($response["error"] ?? "unknown");</pre>
+    </div>
   </section>
 
-  <section class="doc" id="node-webhook">
-    <h2>Webhook Listener <span class="tag post">Node.js</span></h2>
-    <p style="color:var(--muted);font-size:13.5px;">ইনভয়েস verified হলে <code class="inline">callbackUrl</code>-এ signed POST যায়। ব্যালেন্স/অর্ডার আপডেট করার আগে অবশ্যই <code class="inline">X-Signature</code> ভেরিফাই করুন।</p>
-    <pre>const crypto = require('crypto');
+  <section class="doc" id="webhook">
+    <h2>Webhook Listener <span class="tag post">callbackUrl</span></h2>
+    <p style="color:var(--muted);font-size:13.5px;">ইনভয়েস verified হলে <code class="inline">callbackUrl</code>-এ signed POST যায়। ব্যালেন্স/অর্ডার আপডেট করার আগে অবশ্যই <code class="inline">X-Signature</code> (HMAC-SHA256, আপনার Brand API key দিয়ে সাইন করা) ভেরিফাই করুন।</p>
+    <div class="codetabs" data-group="webhook">
+      <button class="codetab active" data-lang="node">Node.js</button>
+      <button class="codetab" data-lang="python">Python</button>
+      <button class="codetab" data-lang="php">PHP</button>
+    </div>
+
+    <div class="codepanel active" data-group="webhook" data-lang="node">
+      <pre>const crypto = require('crypto');
 app.use(express.json());
 
 app.post('/callback', async (req, res) => {
@@ -82,15 +171,54 @@ app.post('/callback', async (req, res) => {
         return res.status(401).send('bad signature');
     }
 
-    const { event, order_id, status, trxId } = { event: req.body.event, order_id: req.body.reference, status: 'paid', trxId: req.body.trxId };
+    const { event, reference, trxId, amount } = req.body;
     if (event === 'invoice.verified') {
-        const [rows] = await db.execute("SELECT status FROM payments WHERE order_id = ?", [order_id]);
-        if (rows.length && rows[0].status !== 'paid') {
-            await db.execute("UPDATE payments SET status='paid', txn_id=? WHERE order_id=?", [trxId, order_id]);
-        }
+        // mark order `reference` as paid, store trxId, credit amount, etc.
     }
     res.sendStatus(200);
 });</pre>
+    </div>
+
+    <div class="codepanel" data-group="webhook" data-lang="python">
+      <pre>import hmac, hashlib, json
+from flask import Flask, request
+
+app = Flask(__name__)
+BRAND_API_KEY = "YOUR_BRAND_API_KEY"
+
+@app.route("/callback", methods=["POST"])
+def callback():
+    raw = request.get_data()
+    expected = hmac.new(BRAND_API_KEY.encode(), raw, hashlib.sha256).hexdigest()
+
+    if request.headers.get("X-Signature") != expected:
+        return "bad signature", 401
+
+    data = request.get_json()
+    if data.get("event") == "invoice.verified":
+        # mark order data["reference"] as paid, store data["trxId"], etc.
+        pass
+    return "", 200</pre>
+    </div>
+
+    <div class="codepanel" data-group="webhook" data-lang="php">
+      <pre>&lt;?php
+$brandApiKey = "YOUR_BRAND_API_KEY";
+$raw = file_get_contents("php://input");
+$expected = hash_hmac("sha256", $raw, $brandApiKey);
+
+$signature = $_SERVER["HTTP_X_SIGNATURE"] ?? "";
+if (!hash_equals($expected, $signature)) {
+    http_response_code(401);
+    exit("bad signature");
+}
+
+$data = json_decode($raw, true);
+if (($data["event"] ?? "") === "invoice.verified") {
+    // mark order $data["reference"] as paid, store $data["trxId"], etc.
+}
+http_response_code(200);</pre>
+    </div>
   </section>
 
   <section class="doc" id="status">
@@ -123,7 +251,7 @@ app.post('/callback', async (req, res) => {
   "receivedAt": 1735000000000,
   "rawSms": "You have received Tk 500.00 from ..."
 }</pre>
-    <p style="color:var(--muted);font-size:13.5px;">PayLink Sync অ্যাপ প্রতিটা কনফার্মেশন SMS পেলেই এখানে পাঠায়। একই Brand-এ একই trxId দ্বিতীয়বার এলে চুপচাপ ignore হয়ে যায় — replay-safe।</p>
+    <p style="color:var(--muted);font-size:13.5px;">FreePay Sync অ্যাপ প্রতিটা কনফার্মেশন SMS পেলেই এখানে পাঠায়। একই Brand-এ একই trxId দ্বিতীয়বার এলে চুপচাপ ignore হয়ে যায় — replay-safe।</p>
   </section>
 
   <section class="doc" id="errors">
@@ -138,6 +266,14 @@ app.post('/callback', async (req, res) => {
   </section>
 </div>
 <script src="/assets/app.js"></script>
-<script>PL.requireAuth("docs");</script>
+<script>
+PL.requireAuth("docs");
+
+document.querySelectorAll(".codetab").forEach((btn) => btn.addEventListener("click", () => {
+  const group = btn.dataset.group, lang = btn.dataset.lang;
+  document.querySelectorAll(`.codetab[data-group="${group}"]`).forEach((b) => b.classList.toggle("active", b === btn));
+  document.querySelectorAll(`.codepanel[data-group="${group}"]`).forEach((p) => p.classList.toggle("active", p.dataset.lang === lang));
+}));
+</script>
 </body>
 </html>
