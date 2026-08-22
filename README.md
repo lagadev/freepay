@@ -66,12 +66,34 @@ Before going live, in `src/api.js`:
 
 ## Design
 
-New palette (`src/pages/style.css`): emerald green (`--accent:#059669`) as
-the primary action color, indigo (`--indigo:#4F46E5`) as the secondary
-accent, and a near-black ink (`--ink:#0B1120`) for dark UI surfaces —
-replacing the old pink/navy PayLink look. Wallet-brand chip colors (bKash
-pink, Nagad orange, etc.) are left as their real-world colors since those
-identify the payment method, not FreePay's own branding.
+Violet-to-blue gradient system (`src/pages/style.css`) matching the provided
+landing page reference — `--accent:#6a5cf5` (violet) to `--blue:#4f7cff` as
+the primary gradient, near-black `--ink:#14152b` for dark surfaces (nav
+active state, balance card, buttons). Real original-artwork SVG logos live
+under `src/pages/raw/assets/logos/`: `freepay.svg` plus one badge per wallet
+method (`bkash.svg`, `nagad.svg`, `upay.svg`, `rocket.svg`, `cellfin.svg`) —
+these are FreePay's own stylized badges, not reproductions of the actual
+trademarked wallet logos. They're used consistently across the landing page,
+nav bar, pay page, brand management, download, donate, and admin panel.
+
+The dashboard nav collapses to a hamburger + slide-down panel under 760px,
+matching the landing page's own mobile menu pattern.
+
+## Admin Panel features
+
+- **Analytics** — 7-day daily verified-volume bar chart, top brands by
+  volume, recent signups, per-method revenue breakdown
+- **Users** — suspend/unsuspend any account
+- **Brands** — enable/disable any brand or any single payment method on it,
+  and regenerate any brand's API key directly (support/security tool)
+- **Transactions** — every invoice platform-wide, with CSV export
+- **Site Settings** — site name, support email, APK download URL, donate
+  numbers — all admin-editable at runtime (no redeploy needed)
+
+## Docs page
+
+`/app/docs.html` now has language-tabbed code examples (cURL / Node.js /
+Python / PHP) for both invoice creation and webhook verification.
 
 ## Not included yet
 
