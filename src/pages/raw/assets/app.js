@@ -17,8 +17,8 @@ window.PL = (function () {
 
   const NAV_ITEMS = [
     { id: "dashboard", href: "/app/dashboard.html", label: "Dashboard", icon: "home" },
-    { id: "brand", href: "/app/brand.html", label: "Brand", icon: "brand" },
-    { id: "transactions", href: "/app/transactions.html", label: "Transaction", icon: "tx" },
+    { id: "brand", href: "/app/brand.html", label: "Brands", icon: "brand" },
+    { id: "transactions", href: "/app/transactions.html", label: "Transactions", icon: "tx" },
     { id: "download", href: "/app/download.html", label: "Download", icon: "download" },
     { id: "docs", href: "/app/docs.html", label: "Docs", icon: "docs" },
     { id: "settings", href: "/app/settings.html", label: "Settings", icon: "settings" },
@@ -76,23 +76,39 @@ window.PL = (function () {
       : "";
     return `
       <div class="navbar"><div class="navbar-inner">
-        <a href="/app/dashboard.html" class="brand-logo">Pay<span>Link</span></a>
+        <a href="/app/dashboard.html" class="brand-logo"><img src="/assets/logos/freepay.svg" alt="FreePay">FreePay</a>
         <div class="navlinks">${links}${adminLink}</div>
         <div class="navuser">
+          <button class="navHamburger" id="plHamburger" aria-label="Menu"><span></span></button>
           <div class="navavatar" title="${user ? user.email : ""}">${initial}</div>
           <button class="iconbtn" id="plLogoutBtn" title="Logout">${ICONS.logout}</button>
         </div>
-      </div></div>`;
+      </div></div>
+      <div class="mobileNavPanel" id="plMobilePanel">${links}${adminLink}</div>`;
   }
 
   function mountNav(active, user) {
     const slot = document.getElementById("navSlot");
     if (slot) slot.outerHTML = renderNav(active, user);
+
     const btn = document.getElementById("plLogoutBtn");
     if (btn) btn.addEventListener("click", async () => {
       await api("/auth/logout", { method: "POST" });
       location.href = "/app/login.html";
     });
+
+    const hamburger = document.getElementById("plHamburger");
+    const panel = document.getElementById("plMobilePanel");
+    if (hamburger && panel) {
+      hamburger.addEventListener("click", () => {
+        const open = panel.classList.toggle("open");
+        hamburger.classList.toggle("open", open);
+      });
+      panel.querySelectorAll("a").forEach((a) => a.addEventListener("click", () => {
+        panel.classList.remove("open");
+        hamburger.classList.remove("open");
+      }));
+    }
   }
 
   // Call at the top of every protected page. Redirects to login if not
