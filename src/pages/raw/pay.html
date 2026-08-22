@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Payment · PayLink</title>
+<title>Payment · FreePay</title>
 <link href="https://fonts.googleapis.com/css2?family=Hind+Siliguri:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/assets/style.css">
 </head>
@@ -41,7 +41,7 @@
   <div class="card hidden" id="successState">
     <div class="center-panel good"><div class="icon">✓</div>
     <h2>Payment Successful!</h2><p>ধন্যবাদ! আপনার পেমেন্ট সফলভাবে যাচাই হয়েছে।</p>
-    <p class="mono" id="successTrx" style="margin-top:10px;font-size:12px;color:#1B1B2F;"></p>
+    <p class="mono" id="successTrx" style="margin-top:10px;font-size:12px;color:#14152b;"></p>
     <p id="redirectNote" style="font-size:12px;color:var(--muted);"></p></div>
   </div>
 
@@ -78,7 +78,7 @@ function brandHeadHtml(brand) {
 }
 
 function methodSwatch(m) {
-  return `<div class="swatch" style="background:${m.color}">${m.label.charAt(0)}</div>`;
+  return `<img src="/assets/logos/${m.id}.svg" alt="${m.label}">`;
 }
 
 function buildInstructions(methodId, label, number, amount) {
@@ -119,7 +119,7 @@ function enterPayState(methodMeta) {
   el("brandHead2").innerHTML = brandHeadHtml(invoice.brand);
   const bg = methodMeta ? methodMeta.color : "#E2136E";
   el("payCard").style.background = bg;
-  el("submitBtn").style.background = "#181826";
+  el("submitBtn").style.background = "#14152b";
   el("instrList").innerHTML = buildInstructions(invoice.method, methodMeta ? methodMeta.label : invoice.method, invoice.merchantNumber, invoice.amount);
   show("payState");
   renderTimer();
