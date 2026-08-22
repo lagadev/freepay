@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <rect width="64" height="64" rx="18" fill="#00A651"/>
+  <circle cx="32" cy="26" r="13" fill="#fff" fill-opacity="0.18"/>
+  <text x="32" y="34" font-family="Arial, sans-serif" font-size="22" font-weight="800" fill="#fff" text-anchor="middle">C</text>
+  <text x="32" y="50" font-family="Arial, sans-serif" font-size="8.5" font-weight="700" fill="#fff" text-anchor="middle" opacity="0.9">Cellfin</text>
+</svg>
