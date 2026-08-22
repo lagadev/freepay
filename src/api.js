@@ -14,7 +14,7 @@
 // Move SESSION_SECRET to `wrangler secret put SESSION_SECRET` in production.
 const CONFIG = {
   SITE_NAME: "FreePay",
-  SESSION_SECRET: "A7xK9mQ2vL8pR4tN6zY1cW5hJ3sF0dG8bU2nI7eX4qP9rT6yM3kV1aZ8wC5",
+  SESSION_SECRET: "CHANGE_ME_TO_A_LONG_RANDOM_SECRET_BEFORE_DEPLOYING",
   INVOICE_TTL_MINUTES: 15,
   SESSION_TTL_DAYS: 30,
   // Emails in this list get admin access automatically after a normal
@@ -35,7 +35,7 @@ const METHODS = [
 const METHOD_IDS = METHODS.map((m) => m.id);
 
 const AMOUNT_TOLERANCE = 0.5;
-const PBKDF2_ITERATIONS = 100000;
+const PBKDF2_ITERATIONS = 120000;
 
 function corsHeaders() {
   return {
@@ -568,13 +568,15 @@ async function setConfigValue(env, key, value) {
 }
 
 async function publicConfig(request, env) {
-  const [apkUrl, donateBkash, donateNagad, donateNote] = await Promise.all([
+  const [apkUrl, donateBkash, donateNagad, donateNote, siteName, supportEmail] = await Promise.all([
     getConfigValue(env, "apk_url", ""),
     getConfigValue(env, "donate_bkash", ""),
     getConfigValue(env, "donate_nagad", ""),
     getConfigValue(env, "donate_note", ""),
+    getConfigValue(env, "site_name", CONFIG.SITE_NAME),
+    getConfigValue(env, "support_email", ""),
   ]);
-  return json({ siteName: CONFIG.SITE_NAME, methods: METHODS, apkUrl, donateBkash, donateNagad, donateNote }, 200);
+  return json({ siteName, methods: METHODS, apkUrl, donateBkash, donateNagad, donateNote, supportEmail }, 200);
 }
 
 // ---- admin handlers --------------------------------------------------
@@ -644,11 +646,67 @@ async function adminTransactions(request, env, url) {
   return json({ transactions: rows.results || [] }, 200);
 }
 
+async function adminRegenerateBrandKey(brandId, request, env) {
+  const admin = await requireAdmin(request, env);
+  if (!admin) return json({ error: "Forbidden." }, 403);
+  const brand = await env.DB.prepare(`SELECT id FROM brands WHERE id = ?`).bind(brandId).first();
+  if (!brand) return json({ error: "Brand পাওয়া যায়নি।" }, 404);
+  const newKey = genId("BR", 32);
+  await env.DB.prepare(`UPDATE brands SET api_key = ? WHERE id = ?`).bind(newKey, brandId).run();
+  return json({ apiKey: newKey }, 200);
+}
+
+async function adminAnalytics(request, env) {
+  const admin = await requireAdmin(request, env);
+  if (!admin) return json({ error: "Forbidden." }, 403);
+
+  const days = 7;
+  const cutoff = Date.now() - days * 86400000;
+
+  const [dailyRows, topBrands, recentUsers, methodBreakdown] = await Promise.all([
+    env.DB.prepare(
+      `SELECT date(verified_at/1000, 'unixepoch') AS day, COALESCE(SUM(amount),0) AS volume, COUNT(*) AS count
+       FROM invoices WHERE status='verified' AND verified_at >= ? GROUP BY day ORDER BY day ASC`
+    ).bind(cutoff).all(),
+    env.DB.prepare(
+      `SELECT b.id, b.name, u.email AS owner_email, COALESCE(SUM(CASE WHEN i.status='verified' THEN i.amount ELSE 0 END),0) AS volume,
+              COUNT(CASE WHEN i.status='verified' THEN 1 END) AS count
+       FROM brands b JOIN users u ON u.id = b.user_id LEFT JOIN invoices i ON i.brand_id = b.id
+       GROUP BY b.id ORDER BY volume DESC LIMIT 8`
+    ).all(),
+    env.DB.prepare(`SELECT email, name, created_at FROM users ORDER BY created_at DESC LIMIT 8`).all(),
+    env.DB.prepare(
+      `SELECT method, COALESCE(SUM(amount),0) AS volume, COUNT(*) AS count FROM invoices
+       WHERE status='verified' AND method IS NOT NULL GROUP BY method ORDER BY volume DESC`
+    ).all(),
+  ]);
+
+  // Fill in any missing days in the window with zeroes so the chart is continuous.
+  const byDay = {};
+  (dailyRows.results || []).forEach((r) => (byDay[r.day] = r));
+  const daily = [];
+  for (let i = days - 1; i >= 0; i--) {
+    const d = new Date(Date.now() - i * 86400000);
+    const key = d.toISOString().slice(0, 10);
+    daily.push(byDay[key] || { day: key, volume: 0, count: 0 });
+  }
+
+  return json(
+    {
+      daily,
+      topBrands: (topBrands.results || []).map((b) => ({ ...b, ownerEmail: b.owner_email })),
+      recentUsers: recentUsers.results || [],
+      methodBreakdown: methodBreakdown.results || [],
+    },
+    200
+  );
+}
+
 async function adminUpdateConfig(request, env) {
   const admin = await requireAdmin(request, env);
   if (!admin) return json({ error: "Forbidden." }, 403);
   const body = await readJson(request);
-  const allowed = ["apk_url", "donate_bkash", "donate_nagad", "donate_note"];
+  const allowed = ["apk_url", "donate_bkash", "donate_nagad", "donate_note", "site_name", "support_email"];
   for (const key of allowed) {
     if (body[key] !== undefined) await setConfigValue(env, key, String(body[key]).slice(0, 1000));
   }
@@ -699,7 +757,10 @@ export async function handleApi(request, env, ctx, url) {
   if ((m = pathname.match(/^\/api\/admin\/brands\/([a-zA-Z0-9-]+)\/toggle$/)) && method === "POST") return await adminToggleBrand(m[1], request, env);
   if ((m = pathname.match(/^\/api\/admin\/brands\/([a-zA-Z0-9-]+)\/methods\/([a-z]+)\/toggle$/)) && method === "POST")
     return await adminToggleBrandMethod(m[1], m[2], request, env);
+  if ((m = pathname.match(/^\/api\/admin\/brands\/([a-zA-Z0-9-]+)\/regenerate-key$/)) && method === "POST")
+    return await adminRegenerateBrandKey(m[1], request, env);
   if (pathname === "/api/admin/transactions" && method === "GET") return await adminTransactions(request, env, url);
+  if (pathname === "/api/admin/analytics" && method === "GET") return await adminAnalytics(request, env);
   if (pathname === "/api/admin/config" && method === "POST") return await adminUpdateConfig(request, env);
 
   return json({ error: "Not found." }, 404);
