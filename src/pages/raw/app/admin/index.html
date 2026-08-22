@@ -3,17 +3,22 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Admin Panel · PayLink</title>
+<title>Admin Panel · FreePay</title>
 <link href="https://fonts.googleapis.com/css2?family=Hind+Siliguri:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/assets/style.css">
 <style>
 .tabs{display:flex;gap:8px;margin-bottom:20px;overflow-x:auto;}
 .tabbtn{background:var(--card);border:1px solid var(--line);border-radius:11px;padding:9px 16px;font-weight:700;font-size:12.5px;cursor:pointer;white-space:nowrap;}
-.tabbtn.active{background:var(--navy);color:#fff;border-color:var(--navy);}
+.tabbtn.active{background:var(--ink);color:#fff;border-color:var(--ink);}
 .tabpanel{display:none;}
 .tabpanel.active{display:block;}
 .methodtogglegrid{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;}
 .methodtoggle{display:flex;align-items:center;gap:6px;background:var(--chip);border-radius:10px;padding:6px 10px;font-size:11.5px;font-weight:700;}
+.methodtoggle img{width:16px;height:16px;border-radius:4px;}
+.sectiontitle{font-size:14px;font-weight:800;margin:0 0 12px;display:flex;align-items:center;justify-content:space-between;}
+.miniList{display:flex;flex-direction:column;gap:0;}
+.miniRow{display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-top:1px solid var(--line);font-size:12.5px;}
+.miniRow:first-child{border-top:none;}
 </style>
 </head>
 <body>
@@ -30,13 +35,35 @@
   </div>
 
   <div class="tabs" style="margin-top:24px;">
-    <button class="tabbtn active" data-tab="users">Users</button>
+    <button class="tabbtn active" data-tab="analytics">Analytics</button>
+    <button class="tabbtn" data-tab="users">Users</button>
     <button class="tabbtn" data-tab="brands">Brands</button>
     <button class="tabbtn" data-tab="tx">Transactions</button>
-    <button class="tabbtn" data-tab="config">Site Config</button>
+    <button class="tabbtn" data-tab="config">Site Settings</button>
   </div>
 
-  <div class="tabpanel active" id="tab-users">
+  <div class="tabpanel active" id="tab-analytics">
+    <div class="card">
+      <div class="sectiontitle">গত ৭ দিনের ভেরিফাইড ভলিউম</div>
+      <div class="barchart" id="revenueChart"></div>
+    </div>
+    <div class="grid2">
+      <div class="card">
+        <div class="sectiontitle">Top Brands (by volume)</div>
+        <div class="miniList" id="topBrandsList"><div class="empty">লোড হচ্ছে...</div></div>
+      </div>
+      <div class="card">
+        <div class="sectiontitle">Recent Signups</div>
+        <div class="miniList" id="recentUsersList"><div class="empty">লোড হচ্ছে...</div></div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="sectiontitle">Method Breakdown</div>
+      <div class="miniList" id="methodBreakdownList"><div class="empty">লোড হচ্ছে...</div></div>
+    </div>
+  </div>
+
+  <div class="tabpanel" id="tab-users">
     <div class="card" style="padding:0;overflow-x:auto;">
       <table class="tx"><thead><tr><th>Email</th><th>Name</th><th>Joined</th><th>Status</th><th></th></tr></thead>
         <tbody id="usersBody"><tr><td colspan="5" class="empty">লোড হচ্ছে...</td></tr></tbody></table>
@@ -48,6 +75,9 @@
   </div>
 
   <div class="tabpanel" id="tab-tx">
+    <div style="display:flex;justify-content:flex-end;margin-bottom:12px;">
+      <button class="btn btn-ghost btn-sm" id="exportCsvBtn">⬇ Export CSV</button>
+    </div>
     <div class="card" style="padding:0;overflow-x:auto;">
       <table class="tx"><thead><tr><th>Invoice</th><th>Brand</th><th>Owner</th><th>Method</th><th>Amount</th><th>Status</th></tr></thead>
         <tbody id="adminTxBody"><tr><td colspan="6" class="empty">লোড হচ্ছে...</td></tr></tbody></table>
@@ -56,8 +86,15 @@
 
   <div class="tabpanel" id="tab-config">
     <div class="card">
+      <h3 style="margin:0 0 14px;font-size:14.5px;">Site</h3>
+      <div class="grid2">
+        <div class="field"><label>Site Name</label><input type="text" id="cfgSiteName" placeholder="FreePay" /></div>
+        <div class="field"><label>Support Email</label><input type="text" id="cfgSupportEmail" placeholder="support@example.com" /></div>
+      </div>
+    </div>
+    <div class="card">
       <h3 style="margin:0 0 14px;font-size:14.5px;">App Download</h3>
-      <div class="field"><label>APK Download URL</label><input type="text" id="cfgApkUrl" placeholder="https://.../paylink-sync.apk" /></div>
+      <div class="field"><label>APK Download URL</label><input type="text" id="cfgApkUrl" placeholder="https://.../freepay-sync.apk" /></div>
     </div>
     <div class="card">
       <h3 style="margin:0 0 14px;font-size:14.5px;">Donate</h3>
@@ -73,6 +110,7 @@
 <script src="/assets/app.js"></script>
 <script>
 const METHODS = ["bkash", "nagad", "upay", "rocket", "cellfin"];
+let lastTxRows = [];
 
 document.querySelectorAll(".tabbtn").forEach((btn) => btn.addEventListener("click", () => {
   document.querySelectorAll(".tabbtn").forEach((b) => b.classList.remove("active"));
@@ -88,6 +126,38 @@ async function loadStats() {
   document.getElementById("stBrands").textContent = r.data.brands;
   document.getElementById("stVolume").textContent = "৳" + PL.fmt(r.data.verifiedVolume);
   document.getElementById("stVerified").textContent = r.data.verifiedCount;
+}
+
+async function loadAnalytics() {
+  const r = await PL.api("/admin/analytics");
+  if (!r.ok) return;
+  const { daily, topBrands, recentUsers, methodBreakdown } = r.data;
+
+  const maxVol = Math.max(1, ...daily.map((d) => d.volume));
+  const chart = document.getElementById("revenueChart");
+  chart.innerHTML = daily.map((d) => {
+    const h = Math.max(4, Math.round((d.volume / maxVol) * 110));
+    const label = new Date(d.day).toLocaleDateString("en-GB", { day: "2-digit", month: "short" });
+    return `<div class="barwrap"><div class="bar" style="height:${h}px"><span class="bval">৳${PL.fmt(d.volume)}</span></div><div class="blabel">${label}</div></div>`;
+  }).join("");
+
+  const topList = document.getElementById("topBrandsList");
+  topList.innerHTML = topBrands.length ? topBrands.map((b) => `
+    <div class="miniRow"><div><b>${b.name}</b><div style="color:var(--muted);font-size:11px;">${b.ownerEmail}</div></div>
+    <div style="text-align:right;"><div class="mono">৳${PL.fmt(b.volume)}</div><div style="color:var(--muted);font-size:11px;">${b.count} tx</div></div></div>`).join("")
+    : '<div class="empty">কোনো ডেটা নেই।</div>';
+
+  const usersList = document.getElementById("recentUsersList");
+  usersList.innerHTML = recentUsers.length ? recentUsers.map((u) => `
+    <div class="miniRow"><div><b>${u.name || u.email.split("@")[0]}</b><div style="color:var(--muted);font-size:11px;">${u.email}</div></div>
+    <div style="color:var(--muted);font-size:11px;">${PL.fmtDate(u.created_at)}</div></div>`).join("")
+    : '<div class="empty">কোনো ইউজার নেই।</div>';
+
+  const mb = document.getElementById("methodBreakdownList");
+  mb.innerHTML = methodBreakdown.length ? methodBreakdown.map((m) => `
+    <div class="miniRow"><div class="methodchip"><img src="/assets/logos/${m.method}.svg" alt="${m.method}"> ${m.method}</div>
+    <div style="text-align:right;"><div class="mono">৳${PL.fmt(m.volume)}</div><div style="color:var(--muted);font-size:11px;">${m.count} tx</div></div></div>`).join("")
+    : '<div class="empty">এখনো কোনো ভেরিফাইড পেমেন্ট নেই।</div>';
 }
 
 async function loadUsers() {
@@ -114,12 +184,15 @@ async function loadBrands() {
   if (!rows.length) { wrap.innerHTML = '<div class="empty">No brands.</div>'; return; }
   wrap.innerHTML = rows.map((b) => `
     <div class="card">
-      <div style="display:flex;justify-content:space-between;align-items:center;">
+      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;">
         <div><b>${b.name}</b> <span style="color:var(--muted);font-size:12px;">· ${b.ownerEmail}</span><div style="font-size:11.5px;color:var(--muted);">${b.domain || "no domain"}</div></div>
-        <label class="switch"><input type="checkbox" class="brandToggle" data-id="${b.id}" ${b.enabled ? "checked" : ""}><span class="slider"></span></label>
+        <div style="display:flex;align-items:center;gap:10px;">
+          <button class="btn btn-ghost btn-sm regenBrandBtn" data-id="${b.id}">↻ Regenerate Key</button>
+          <label class="switch"><input type="checkbox" class="brandToggle" data-id="${b.id}" ${b.enabled ? "checked" : ""}><span class="slider"></span></label>
+        </div>
       </div>
       <div class="methodtogglegrid">
-        ${METHODS.map((m) => `<label class="methodtoggle"><input type="checkbox" class="methodToggle" data-brand="${b.id}" data-method="${m}" ${b.methodsEnabled[m] ? "checked" : ""}/> ${m}</label>`).join("")}
+        ${METHODS.map((m) => `<label class="methodtoggle"><input type="checkbox" class="methodToggle" data-brand="${b.id}" data-method="${m}" ${b.methodsEnabled[m] ? "checked" : ""}/><img src="/assets/logos/${m}.svg" alt="${m}"> ${m}</label>`).join("")}
       </div>
     </div>`).join("");
 
@@ -131,21 +204,42 @@ async function loadBrands() {
     const r2 = await PL.api(`/admin/brands/${el.dataset.brand}/methods/${el.dataset.method}/toggle`, { method: "POST", body: { enabled: el.checked } });
     PL.toast(r2.ok ? "আপডেট হয়েছে।" : (r2.data.error || "সমস্যা হয়েছে।"), r2.ok ? "good" : "bad");
   }));
+  wrap.querySelectorAll(".regenBrandBtn").forEach((btn) => btn.addEventListener("click", async () => {
+    if (!confirm("এই Brand-এর API key regenerate করবেন? পুরোনো key সাথে সাথে কাজ করা বন্ধ হয়ে যাবে।")) return;
+    const r2 = await PL.api(`/admin/brands/${btn.dataset.id}/regenerate-key`, { method: "POST" });
+    PL.toast(r2.ok ? "নতুন key তৈরি হয়েছে।" : (r2.data.error || "সমস্যা হয়েছে।"), r2.ok ? "good" : "bad");
+  }));
 }
 
 async function loadTx() {
-  const r = await PL.api("/admin/transactions?limit=100");
+  const r = await PL.api("/admin/transactions?limit=200");
   const body = document.getElementById("adminTxBody");
-  const rows = (r.ok && r.data.transactions) || [];
-  if (!rows.length) { body.innerHTML = '<tr><td colspan="6" class="empty">No records found.</td></tr>'; return; }
-  body.innerHTML = rows.map((t) => `
+  lastTxRows = (r.ok && r.data.transactions) || [];
+  if (!lastTxRows.length) { body.innerHTML = '<tr><td colspan="6" class="empty">No records found.</td></tr>'; return; }
+  body.innerHTML = lastTxRows.map((t) => `
     <tr><td class="mono">${t.id}</td><td>${t.brand_name}</td><td>${t.owner_email}</td><td>${t.method || "—"}</td>
     <td class="mono">৳${PL.fmt(t.amount)}</td><td><span class="badge ${t.status}">${t.status.toUpperCase()}</span></td></tr>`).join("");
 }
 
+document.getElementById("exportCsvBtn").addEventListener("click", () => {
+  if (!lastTxRows.length) { PL.toast("কোনো ডেটা নেই।", "bad"); return; }
+  const header = ["Invoice", "Brand", "Owner", "Method", "Amount", "Status", "Created At"];
+  const lines = [header.join(",")].concat(lastTxRows.map((t) =>
+    [t.id, t.brand_name, t.owner_email, t.method || "", t.amount, t.status, new Date(t.created_at).toISOString()]
+      .map((v) => `"${String(v).replace(/"/g, '""')}"`).join(",")
+  ));
+  const blob = new Blob([lines.join("\n")], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url; a.download = "freepay-transactions.csv"; a.click();
+  URL.revokeObjectURL(url);
+});
+
 async function loadConfig() {
   const r = await PL.api("/config/public");
   if (!r.ok) return;
+  document.getElementById("cfgSiteName").value = r.data.siteName || "";
+  document.getElementById("cfgSupportEmail").value = r.data.supportEmail || "";
   document.getElementById("cfgApkUrl").value = r.data.apkUrl || "";
   document.getElementById("cfgDonateBkash").value = r.data.donateBkash || "";
   document.getElementById("cfgDonateNagad").value = r.data.donateNagad || "";
@@ -154,6 +248,8 @@ async function loadConfig() {
 
 document.getElementById("saveConfigBtn").addEventListener("click", async () => {
   const r = await PL.api("/admin/config", { method: "POST", body: {
+    site_name: document.getElementById("cfgSiteName").value.trim(),
+    support_email: document.getElementById("cfgSupportEmail").value.trim(),
     apk_url: document.getElementById("cfgApkUrl").value.trim(),
     donate_bkash: document.getElementById("cfgDonateBkash").value.trim(),
     donate_nagad: document.getElementById("cfgDonateNagad").value.trim(),
@@ -165,7 +261,7 @@ document.getElementById("saveConfigBtn").addEventListener("click", async () => {
 (async function () {
   const user = await PL.requireAdmin("admin");
   if (!user) return;
-  loadStats(); loadUsers(); loadBrands(); loadTx(); loadConfig();
+  loadStats(); loadAnalytics(); loadUsers(); loadBrands(); loadTx(); loadConfig();
 })();
 </script>
 </body>
