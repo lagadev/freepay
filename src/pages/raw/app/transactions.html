@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Transactions · PayLink</title>
+<title>Transactions · FreePay</title>
 <link href="https://fonts.googleapis.com/css2?family=Hind+Siliguri:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/assets/style.css">
 </head>
@@ -34,7 +34,7 @@
     <tr>
       <td class="mono">${t.id}${t.reference ? " · " + t.reference : ""}<br><span style="color:var(--muted);font-size:11px;">${PL.fmtDate(t.created_at)}</span></td>
       <td>${t.brand_name}</td>
-      <td>${t.method || "—"}</td>
+      <td>${t.method ? `<span class="methodchip"><img src="/assets/logos/${t.method}.svg" alt="${t.method}">${t.method}</span>` : "—"}</td>
       <td class="mono">৳${PL.fmt(t.amount)}</td>
       <td><span class="badge ${t.status}">${t.status.toUpperCase()}</span></td>
     </tr>`).join("");
