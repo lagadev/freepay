@@ -60,13 +60,15 @@ for (const rel of files) {
   else route = "/" + relPosix;
 
   const full = path.join(RAW_DIR, rel);
-  let content = fs.readFileSync(full, "utf8");
+  let content = fs.readFileSync(full, relPosix.endsWith(".svg") ? "utf8" : "utf8");
   if (relPosix.endsWith(".html") || relPosix.endsWith(".js")) content = rebrand(content);
 
   const contentType = relPosix.endsWith(".css")
     ? "text/css; charset=UTF-8"
     : relPosix.endsWith(".js")
     ? "application/javascript; charset=UTF-8"
+    : relPosix.endsWith(".svg")
+    ? "image/svg+xml; charset=UTF-8"
     : "text/html; charset=UTF-8";
 
   entries.push({ route, content, contentType });
