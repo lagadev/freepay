@@ -35,7 +35,7 @@ const METHODS = [
 const METHOD_IDS = METHODS.map((m) => m.id);
 
 const AMOUNT_TOLERANCE = 0.5;
-const PBKDF2_ITERATIONS = 100000;
+const PBKDF2_ITERATIONS = 120000;
 
 function corsHeaders() {
   return {
@@ -161,6 +161,27 @@ async function getBrandByApiKey(request, env) {
   const m = auth.match(/^Bearer\s+(.+)$/i);
   if (!m) return null;
   return await env.DB.prepare(`SELECT * FROM brands WHERE api_key = ?`).bind(m[1].trim()).first();
+}
+
+// Used by the FreePay Sync mobile app to validate a Brand API key on login
+// and show which brand it's connected to, without exposing anything the
+// app doesn't need.
+async function brandMe(request, env) {
+  const brand = await getBrandByApiKey(request, env);
+  if (!brand) return json({ error: "API key ভুল বা নেই।" }, 401);
+  return json(
+    {
+      id: brand.id,
+      name: brand.name,
+      logoUrl: brand.logo_url,
+      enabled: !!brand.enabled,
+      methodsEnabled: {
+        bkash: !!brand.bkash_enabled, nagad: !!brand.nagad_enabled, upay: !!brand.upay_enabled,
+        rocket: !!brand.rocket_enabled, cellfin: !!brand.cellfin_enabled,
+      },
+    },
+    200
+  );
 }
 
 function userPublic(u) {
@@ -730,6 +751,7 @@ export async function handleApi(request, env, ctx, url) {
   // brands (session)
   if (pathname === "/api/brands" && method === "GET") return await listBrands(request, env);
   if (pathname === "/api/brands" && method === "POST") return await createBrand(request, env);
+  if (pathname === "/api/brands/me" && method === "GET") return await brandMe(request, env);
   let m;
   if ((m = pathname.match(/^\/api\/brands\/([a-zA-Z0-9-]+)$/)) && method === "POST") return await updateBrandProfile(m[1], request, env);
   if ((m = pathname.match(/^\/api\/brands\/([a-zA-Z0-9-]+)\/methods$/)) && method === "POST") return await updateBrandMethods(m[1], request, env);
