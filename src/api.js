@@ -14,7 +14,7 @@
 // Move SESSION_SECRET to `wrangler secret put SESSION_SECRET` in production.
 const CONFIG = {
   SITE_NAME: "FreePay",
-  SESSION_SECRET: "CHANGE_ME_TO_A_LONG_RANDOM_SECRET_BEFORE_DEPLOYING",
+  SESSION_SECRET: "5b63732a0ba6258be7d1300226f2deeecfe43cfb6869efbb",
   INVOICE_TTL_MINUTES: 15,
   SESSION_TTL_DAYS: 30,
   // Emails in this list get admin access automatically after a normal
@@ -45,7 +45,7 @@ const METHODS = [
 const METHOD_IDS = METHODS.map((m) => m.id);
 
 const AMOUNT_TOLERANCE = 0.5;
-const PBKDF2_ITERATIONS = 120000;
+const PBKDF2_ITERATIONS = 100000;
 
 function corsHeaders() {
   return {
