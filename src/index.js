@@ -5,7 +5,7 @@
  * go to the JSON API (api.js); everything else is served straight out of
  * pages.generated.js (built by build-pages.js from src/pages/raw/).
  */
-import { handleApi, corsHeaders, json } from "./api.js";
+import { handleApi, corsHeaders, securityHeaders, json } from "./api.js";
 import { PAGES } from "./pages.generated.js";
 
 export default {
@@ -32,10 +32,14 @@ export default {
     if (page && request.method === "GET") {
       return new Response(page.body, {
         status: 200,
-        headers: { "Content-Type": page.contentType, "Cache-Control": pathname.startsWith("/assets/") ? "public, max-age=300" : "no-cache" },
+        headers: {
+          "Content-Type": page.contentType,
+          "Cache-Control": pathname.startsWith("/assets/") ? "public, max-age=300" : "no-cache",
+          ...securityHeaders(),
+        },
       });
     }
 
-    return new Response("Not found.", { status: 404, headers: { "Content-Type": "text/plain" } });
+    return new Response("Not found.", { status: 404, headers: { "Content-Type": "text/plain", ...securityHeaders() } });
   },
 };
