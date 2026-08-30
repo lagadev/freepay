@@ -69,8 +69,8 @@ function renderList() {
   if (!brands.length) { list.innerHTML = '<div class="empty">এখনো কোনো Brand তৈরি হয়নি।</div>'; return; }
   list.innerHTML = brands.map((b) => `
     <div class="brandcard ${b.id === activeId ? "active" : ""}" data-id="${b.id}">
-      <div class="blogo">${b.logoUrl ? `<img src="${b.logoUrl}" />` : b.name.charAt(0).toUpperCase()}</div>
-      <div class="bmeta"><div class="bname">${b.name}</div><div class="bdomain">${b.domain || "কোনো ডোমেইন যোগ করা হয়নি"}</div></div>
+      <div class="blogo">${b.logoUrl ? `<img src="${PL.esc(b.logoUrl)}" />` : PL.esc(b.name.charAt(0).toUpperCase())}</div>
+      <div class="bmeta"><div class="bname">${PL.esc(b.name)}</div><div class="bdomain">${PL.esc(b.domain) || "কোনো ডোমেইন যোগ করা হয়নি"}</div></div>
       <div class="bstatus"><span class="badge ${b.enabled ? "verified" : "expired"}">${b.enabled ? "ACTIVE" : "DISABLED"}</span></div>
     </div>`).join("");
   list.querySelectorAll(".brandcard").forEach((el) => el.addEventListener("click", () => selectBrand(el.dataset.id)));
@@ -89,9 +89,9 @@ function renderDetail(brand) {
   panel.innerHTML = `
     <div class="card">
       <h3 style="margin:0 0 14px;font-size:14.5px;">Brand প্রোফাইল</h3>
-      <div class="field"><label>Brand Name</label><input type="text" id="editName" value="${brand.name}" /></div>
-      <div class="field"><label>Brand Logo URL</label><input type="text" id="editLogo" value="${brand.logoUrl || ""}" placeholder="https://.../logo.png" /><div class="hint">স্কোয়ার PNG/SVG লোগো recommended — এটাই কাস্টমার pay পেজে দেখবে।</div></div>
-      <div class="field"><label>Domain Name (Locked)</label><input type="text" value="${brand.domain || "—"}" disabled /></div>
+      <div class="field"><label>Brand Name</label><input type="text" id="editName" value="${PL.esc(brand.name)}" /></div>
+      <div class="field"><label>Brand Logo URL</label><input type="text" id="editLogo" value="${PL.esc(brand.logoUrl || "")}" placeholder="https://.../logo.png" /><div class="hint">স্কোয়ার PNG/SVG লোগো recommended — এটাই কাস্টমার pay পেজে দেখবে।</div></div>
+      <div class="field"><label>Domain Name (Locked)</label><input type="text" value="${PL.esc(brand.domain || "—")}" disabled /></div>
       <button class="btn btn-dark" id="saveProfileBtn">সেভ করুন</button>
     </div>
 
@@ -104,7 +104,7 @@ function renderDetail(brand) {
 
     <div class="card">
       <h3 style="margin:0 0 14px;font-size:14.5px;">API Key</h3>
-      <div class="keyval">${brand.apiKey}</div>
+      <div class="keyval">${PL.esc(brand.apiKey)}</div>
       <div class="rowbtns" style="display:flex;gap:10px;">
         <button class="btn btn-ghost btn-sm" id="copyKeyBtn">${PL.ICONS.copy} Copy</button>
         <button class="btn btn-danger btn-sm" id="regenKeyBtn">↻ Regenerate</button>
@@ -117,7 +117,7 @@ function renderDetail(brand) {
         <div class="methodrow-swatch"><img src="/assets/logos/${m.id}.svg" alt="${m.label}" style="width:100%;height:100%;border-radius:9px;"></div>
         <div>
           <div style="font-weight:700;font-size:13px;">${m.label}</div>
-          <input type="text" id="num_${m.id}" placeholder="01XXXXXXXXX" value="${brand.numbers[m.id] || ""}"
+          <input type="text" id="num_${m.id}" placeholder="01XXXXXXXXX" value="${PL.esc(brand.numbers[m.id] || "")}"
                  style="border:1px solid var(--line);border-radius:8px;padding:6px 9px;font-size:12px;margin-top:5px;width:150px;" />
         </div>
       </div>
