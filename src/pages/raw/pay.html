@@ -74,19 +74,19 @@ let pollTimer = null, tickTimer = null;
 
 function brandHeadHtml(brand) {
   if (!brand) return "";
-  return `${brand.logoUrl ? `<img src="${brand.logoUrl}" />` : ""}<div class="bname">${brand.name}</div>`;
+  return `${brand.logoUrl ? `<img src="${PL.esc(brand.logoUrl)}" />` : ""}<div class="bname">${PL.esc(brand.name)}</div>`;
 }
 
 function methodSwatch(m) {
-  return `<img src="/assets/logos/${m.id}.svg" alt="${m.label}">`;
+  return `<img src="/assets/logos/${PL.esc(m.id)}.svg" alt="${PL.esc(m.label)}">`;
 }
 
 function buildInstructions(methodId, label, number, amount) {
   const meta = METHOD_META[methodId] || { ussd: "" };
   let out = "";
-  out += `<li><span class="dot2"></span><span>${meta.ussd} ব্যবহার করে আপনার ${label} মোবাইল মেনু/অ্যাপে যান।</span></li>`;
+  out += `<li><span class="dot2"></span><span>${PL.esc(meta.ussd)} ব্যবহার করে আপনার ${PL.esc(label)} মোবাইল মেনু/অ্যাপে যান।</span></li>`;
   out += `<li><span class="dot2"></span><span><span class="hl">"Send Money"</span> সিলেক্ট করুন।</span></li>`;
-  out += `<li><span class="dot2"></span><span>প্রাপক নম্বরঃ <span class="hl">${number}</span><button class="copytag" id="copyNumBtn" type="button">Copy</button></span></li>`;
+  out += `<li><span class="dot2"></span><span>প্রাপক নম্বরঃ <span class="hl">${PL.esc(number)}</span><button class="copytag" id="copyNumBtn" type="button">Copy</button></span></li>`;
   out += `<li><span class="dot2"></span><span>টাকার পরিমাণঃ <span class="hl">৳${PL.fmt(amount)}</span></span></li>`;
   out += `<li><span class="dot2"></span><span>পিন দিয়ে কনফার্ম করুন — একটা কনফার্মেশন SMS পাবেন।</span></li>`;
   out += `<li><span class="dot2"></span><span>এখন উপরের বক্সে <span class="hl">Transaction ID</span> দিন এবং <span class="hl">VERIFY</span> চাপুন।</span></li>`;
