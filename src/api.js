@@ -14,7 +14,7 @@
 // Move SESSION_SECRET to `wrangler secret put SESSION_SECRET` in production.
 const CONFIG = {
   SITE_NAME: "FreePay",
-  SESSION_SECRET: "A7xK9mQ2vL8pR4tN6zY1cW5hJ3sF0dG8bU2nI7eX4qP9rT6yM3kV1aZ8wC5",
+  SESSION_SECRET: "CHANGE_ME_TO_A_LONG_RANDOM_SECRET_BEFORE_DEPLOYING",
   INVOICE_TTL_MINUTES: 15,
   SESSION_TTL_DAYS: 30,
   // Emails in this list get admin access automatically after a normal
@@ -22,6 +22,16 @@ const CONFIG = {
   // real password must exist and log in normally.
   ADMIN_EMAILS: ["devugly@login.com"],
   CORS_ORIGIN: "*",
+
+  // ---- security tuning ----
+  LOGIN_MAX_FAILED_ATTEMPTS: 5, // per-account lockout threshold
+  LOGIN_LOCKOUT_MINUTES: 15,
+  RATE_LIMIT_LOGIN_PER_IP: 15, // requests per window
+  RATE_LIMIT_LOGIN_WINDOW_MIN: 15,
+  RATE_LIMIT_SIGNUP_PER_IP: 6,
+  RATE_LIMIT_SIGNUP_WINDOW_MIN: 60,
+  RATE_LIMIT_VERIFY_PER_INVOICE: 30, // TrxID guesses per invoice
+  RATE_LIMIT_VERIFY_WINDOW_MIN: 15,
 };
 // -------------------------------------------------------------------------
 
@@ -35,7 +45,7 @@ const METHODS = [
 const METHOD_IDS = METHODS.map((m) => m.id);
 
 const AMOUNT_TOLERANCE = 0.5;
-const PBKDF2_ITERATIONS = 100000;
+const PBKDF2_ITERATIONS = 120000;
 
 function corsHeaders() {
   return {
@@ -44,10 +54,35 @@ function corsHeaders() {
     "Access-Control-Allow-Headers": "Content-Type, Authorization",
   };
 }
+
+// Applied to EVERY response (HTML and JSON) by index.js. Blocks clickjacking,
+// MIME-sniffing, leaking referrers cross-site, and — combined with escaping
+// user content client-side — limits what an XSS payload could reach even if
+// one slipped through, since scripts/styles/fonts/connections are locked to
+// this origin (plus Google Fonts, which the UI actually uses).
+function securityHeaders() {
+  return {
+    "X-Content-Type-Options": "nosniff",
+    "X-Frame-Options": "DENY",
+    "Referrer-Policy": "strict-origin-when-cross-origin",
+    "Permissions-Policy": "geolocation=(), camera=(), microphone=(), payment=()",
+    "Strict-Transport-Security": "max-age=31536000; includeSubDomains",
+    "Content-Security-Policy":
+      "default-src 'self'; " +
+      "script-src 'self' 'unsafe-inline'; " +
+      "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; " +
+      "font-src 'self' https://fonts.gstatic.com; " +
+      "img-src 'self' data: https:; " +
+      "connect-src 'self'; " +
+      "frame-ancestors 'none'; " +
+      "base-uri 'self'; form-action 'self'",
+  };
+}
+
 function json(data, status, extraHeaders) {
   return new Response(JSON.stringify(data), {
     status,
-    headers: { "Content-Type": "application/json", ...corsHeaders(), ...(extraHeaders || {}) },
+    headers: { "Content-Type": "application/json", ...corsHeaders(), ...securityHeaders(), ...(extraHeaders || {}) },
   });
 }
 async function readJson(request) {
@@ -79,6 +114,57 @@ function fromHex(hex) {
   return out;
 }
 
+// ---- security utilities ---------------------------------------------
+
+function getClientIp(request) {
+  return request.headers.get("CF-Connecting-IP") || request.headers.get("X-Forwarded-For") || "unknown";
+}
+
+/**
+ * Simple fixed-window rate limiter backed by D1. Returns true if the request
+ * is allowed, false if the caller should be blocked (429). Not perfectly
+ * precise under high concurrency (D1 has no atomic increment), but more
+ * than sufficient to stop scripted brute-force/spam against auth endpoints.
+ */
+async function checkRateLimit(env, key, max, windowMinutes) {
+  const now = Date.now();
+  const windowMs = windowMinutes * 60000;
+  const row = await env.DB.prepare(`SELECT * FROM rate_limits WHERE key = ?`).bind(key).first();
+
+  if (!row || now - row.window_start > windowMs) {
+    await env.DB.prepare(
+      `INSERT INTO rate_limits (key, count, window_start) VALUES (?, 1, ?)
+       ON CONFLICT(key) DO UPDATE SET count = 1, window_start = excluded.window_start`
+    ).bind(key, now).run();
+    return true;
+  }
+  if (row.count >= max) return false;
+  await env.DB.prepare(`UPDATE rate_limits SET count = count + 1 WHERE key = ?`).bind(key).run();
+  return true;
+}
+
+async function logAudit(env, adminEmail, action, targetType, targetId, detail, request) {
+  try {
+    await env.DB.prepare(
+      `INSERT INTO admin_audit_log (id, admin_email, action, target_type, target_id, detail, ip, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+    )
+      .bind(
+        crypto.randomUUID(),
+        adminEmail,
+        action,
+        targetType || null,
+        targetId || null,
+        detail || null,
+        request ? getClientIp(request) : null,
+        Date.now()
+      )
+      .run();
+  } catch {
+    // Audit logging must never break the actual admin action.
+  }
+}
+
 // ---- password hashing ---------------------------------------------------
 async function hashPassword(password) {
   const salt = crypto.getRandomValues(new Uint8Array(16));
@@ -94,6 +180,12 @@ async function verifyPassword(password, stored) {
   const bits = await crypto.subtle.deriveBits({ name: "PBKDF2", salt, iterations: PBKDF2_ITERATIONS, hash: "SHA-256" }, keyMaterial, 256);
   return toHex(new Uint8Array(bits)) === hashHex;
 }
+// A syntactically-valid but unusable hash used as the comparison target when
+// no account exists, so a login attempt for a nonexistent email still pays
+// the same PBKDF2 cost as a real one (constant-time-ish, defeats simple
+// response-time account enumeration).
+const DUMMY_HASH =
+  "00000000000000000000000000000000:0000000000000000000000000000000000000000000000000000000000000000";
 
 // ---- sessions -------------------------------------------------------------
 async function hmacHex(message) {
@@ -108,8 +200,8 @@ function b64urlDecode(str) {
   const pad = str.length % 4 === 0 ? "" : "=".repeat(4 - (str.length % 4));
   return decodeURIComponent(escape(atob(str.replace(/-/g, "+").replace(/_/g, "/") + pad)));
 }
-async function createSessionToken(userId) {
-  const payload = JSON.stringify({ uid: userId, exp: Date.now() + CONFIG.SESSION_TTL_DAYS * 86400000 });
+async function createSessionToken(userId, tokenVersion) {
+  const payload = JSON.stringify({ uid: userId, tv: tokenVersion || 0, exp: Date.now() + CONFIG.SESSION_TTL_DAYS * 86400000 });
   const p = b64urlEncode(payload);
   return `${p}.${await hmacHex(p)}`;
 }
@@ -146,6 +238,9 @@ async function getSessionUser(request, env) {
   if (!payload) return null;
   const user = await env.DB.prepare(`SELECT * FROM users WHERE id = ?`).bind(payload.uid).first();
   if (!user || user.suspended) return null;
+  // If an admin (or the user via "logout everywhere") bumped token_version
+  // since this token was issued, treat the old token as dead.
+  if ((payload.tv || 0) !== (user.token_version || 0)) return null;
   return user;
 }
 function isAdmin(user) {
@@ -224,36 +319,72 @@ function invoicePublic(inv, brand) {
 // ---- auth handlers ------------------------------------------------------
 
 async function handleSignup(request, env) {
+  const ip = getClientIp(request);
+  const allowed = await checkRateLimit(env, `signup:${ip}`, CONFIG.RATE_LIMIT_SIGNUP_PER_IP, CONFIG.RATE_LIMIT_SIGNUP_WINDOW_MIN);
+  if (!allowed) return json({ error: "খুব বেশি চেষ্টা হয়েছে। কিছুক্ষণ পর আবার চেষ্টা করুন।" }, 429);
+
   const body = await readJson(request);
   const email = String(body.email || "").trim().toLowerCase();
   const password = String(body.password || "");
-  const name = body.name ? String(body.name).slice(0, 80) : null;
+  const name = body.name ? String(body.name).trim().slice(0, 80) : null;
 
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return json({ error: "সঠিক ইমেইল দিন।" }, 400);
   if (password.length < 8) return json({ error: "পাসওয়ার্ড কমপক্ষে ৮ ক্যারেক্টার হতে হবে।" }, 400);
+  if (!/[a-zA-Z]/.test(password) || !/[0-9]/.test(password)) {
+    return json({ error: "পাসওয়ার্ডে কমপক্ষে একটি অক্ষর ও একটি সংখ্যা থাকতে হবে।" }, 400);
+  }
 
   const existing = await env.DB.prepare(`SELECT id FROM users WHERE email = ?`).bind(email).first();
   if (existing) return json({ error: "এই ইমেইল দিয়ে আগে থেকেই অ্যাকাউন্ট আছে।" }, 409);
 
   const id = crypto.randomUUID();
   const now = Date.now();
-  await env.DB.prepare(`INSERT INTO users (id, email, password_hash, name, suspended, created_at) VALUES (?, ?, ?, ?, 0, ?)`)
+  await env.DB.prepare(
+    `INSERT INTO users (id, email, password_hash, name, suspended, failed_login_attempts, token_version, created_at)
+     VALUES (?, ?, ?, ?, 0, 0, 0, ?)`
+  )
     .bind(id, email, await hashPassword(password), name, now)
     .run();
 
-  const token = await createSessionToken(id);
+  const token = await createSessionToken(id, 0);
   const user = await env.DB.prepare(`SELECT * FROM users WHERE id = ?`).bind(id).first();
   return json({ user: userPublic(user) }, 201, sessionCookieHeader(token));
 }
 
 async function handleLogin(request, env) {
+  const ip = getClientIp(request);
+  const ipAllowed = await checkRateLimit(env, `login:${ip}`, CONFIG.RATE_LIMIT_LOGIN_PER_IP, CONFIG.RATE_LIMIT_LOGIN_WINDOW_MIN);
+  if (!ipAllowed) return json({ error: "খুব বেশি লগইন চেষ্টা হয়েছে এই IP থেকে। কিছুক্ষণ পর আবার চেষ্টা করুন।" }, 429);
+
   const body = await readJson(request);
   const email = String(body.email || "").trim().toLowerCase();
   const password = String(body.password || "");
   const user = await env.DB.prepare(`SELECT * FROM users WHERE email = ?`).bind(email).first();
-  if (!user || !(await verifyPassword(password, user.password_hash))) return json({ error: "ইমেইল অথবা পাসওয়ার্ড ভুল।" }, 401);
+
+  // Per-account lockout: independent of the IP limit above, so a distributed
+  // attack against ONE account still gets stopped even from many IPs.
+  if (user && user.lockout_until && Date.now() < user.lockout_until) {
+    const minsLeft = Math.ceil((user.lockout_until - Date.now()) / 60000);
+    return json({ error: `একাধিকবার ভুল পাসওয়ার্ড দেওয়ায় অ্যাকাউন্টটি সাময়িকভাবে লক করা হয়েছে। ${minsLeft} মিনিট পর আবার চেষ্টা করুন।` }, 423);
+  }
+
+  const validPassword = await verifyPassword(password, user ? user.password_hash : DUMMY_HASH);
+  if (!user || !validPassword) {
+    if (user) {
+      const attempts = (user.failed_login_attempts || 0) + 1;
+      const lockout = attempts >= CONFIG.LOGIN_MAX_FAILED_ATTEMPTS ? Date.now() + CONFIG.LOGIN_LOCKOUT_MINUTES * 60000 : null;
+      await env.DB.prepare(`UPDATE users SET failed_login_attempts = ?, lockout_until = ? WHERE id = ?`)
+        .bind(attempts, lockout, user.id)
+        .run();
+    }
+    return json({ error: "ইমেইল অথবা পাসওয়ার্ড ভুল।" }, 401);
+  }
   if (user.suspended) return json({ error: "এই অ্যাকাউন্ট সাসপেন্ড করা হয়েছে। এডমিনের সাথে যোগাযোগ করুন।" }, 403);
-  const token = await createSessionToken(user.id);
+
+  // Successful login clears the failure counter.
+  await env.DB.prepare(`UPDATE users SET failed_login_attempts = 0, lockout_until = NULL WHERE id = ?`).bind(user.id).run();
+
+  const token = await createSessionToken(user.id, user.token_version || 0);
   return json({ user: userPublic(user) }, 200, sessionCookieHeader(token));
 }
 
@@ -500,6 +631,9 @@ async function verifyInvoice(id, request, env, ctx) {
   if (invoice.status === "expired") return json({ ...invoicePublic(invoice), message: "This invoice has expired." }, 409);
   if (!invoice.method) return json({ error: "আগে পেমেন্ট মেথড সিলেক্ট করুন।" }, 400);
 
+  const allowed = await checkRateLimit(env, `verify:${id}`, CONFIG.RATE_LIMIT_VERIFY_PER_INVOICE, CONFIG.RATE_LIMIT_VERIFY_WINDOW_MIN);
+  if (!allowed) return json({ error: "অনেকবার চেষ্টা হয়েছে। কিছুক্ষণ অপেক্ষা করুন।" }, 429);
+
   const body = await readJson(request);
   const trxId = normalizeTrx(body.trxId);
   const senderNumber = body.senderNumber ? String(body.senderNumber).trim() : null;
@@ -605,36 +739,165 @@ async function publicConfig(request, env) {
 async function adminStats(request, env) {
   const admin = await requireAdmin(request, env);
   if (!admin) return json({ error: "Forbidden." }, 403);
-  const [users, brands, invoices, verified] = await Promise.all([
+  const [users, brands, invoices, verified, suspended, locked] = await Promise.all([
     env.DB.prepare(`SELECT COUNT(*) c FROM users`).first(),
     env.DB.prepare(`SELECT COUNT(*) c FROM brands`).first(),
     env.DB.prepare(`SELECT COUNT(*) c FROM invoices`).first(),
     env.DB.prepare(`SELECT COALESCE(SUM(amount),0) s, COUNT(*) c FROM invoices WHERE status='verified'`).first(),
+    env.DB.prepare(`SELECT COUNT(*) c FROM users WHERE suspended = 1`).first(),
+    env.DB.prepare(`SELECT COUNT(*) c FROM users WHERE lockout_until IS NOT NULL AND lockout_until > ?`).bind(Date.now()).first(),
   ]);
-  return json({ users: users.c, brands: brands.c, invoices: invoices.c, verifiedVolume: verified.s, verifiedCount: verified.c }, 200);
+  return json(
+    {
+      users: users.c, brands: brands.c, invoices: invoices.c,
+      verifiedVolume: verified.s, verifiedCount: verified.c,
+      suspendedUsers: suspended.c, lockedUsers: locked.c,
+    },
+    200
+  );
 }
 
-async function adminListUsers(request, env) {
+// ---- admin: users (search, pagination, full detail, edit, delete, reset) --
+
+async function adminListUsers(request, env, url) {
   const admin = await requireAdmin(request, env);
   if (!admin) return json({ error: "Forbidden." }, 403);
-  const rows = await env.DB.prepare(`SELECT id, email, name, suspended, created_at FROM users ORDER BY created_at DESC LIMIT 500`).all();
-  return json({ users: rows.results || [] }, 200);
+  const search = (url.searchParams.get("q") || "").trim();
+  const page = Math.max(1, Number(url.searchParams.get("page")) || 1);
+  const limit = Math.min(Number(url.searchParams.get("limit")) || 25, 100);
+  const offset = (page - 1) * limit;
+
+  const where = search ? `WHERE email LIKE ? OR name LIKE ?` : "";
+  const params = search ? [`%${search}%`, `%${search}%`] : [];
+
+  const [rows, countRow] = await Promise.all([
+    env.DB.prepare(
+      `SELECT id, email, name, suspended, failed_login_attempts, lockout_until, token_version, created_at
+       FROM users ${where} ORDER BY created_at DESC LIMIT ? OFFSET ?`
+    ).bind(...params, limit, offset).all(),
+    env.DB.prepare(`SELECT COUNT(*) c FROM users ${where}`).bind(...params).first(),
+  ]);
+  return json({ users: rows.results || [], total: countRow.c, page, limit }, 200);
+}
+
+async function adminUserDetail(userId, request, env) {
+  const admin = await requireAdmin(request, env);
+  if (!admin) return json({ error: "Forbidden." }, 403);
+  const user = await env.DB.prepare(
+    `SELECT id, email, name, suspended, failed_login_attempts, lockout_until, token_version, created_at FROM users WHERE id = ?`
+  ).bind(userId).first();
+  if (!user) return json({ error: "User পাওয়া যায়নি।" }, 404);
+
+  const [brands, stats] = await Promise.all([
+    env.DB.prepare(`SELECT * FROM brands WHERE user_id = ? ORDER BY created_at DESC`).bind(userId).all(),
+    env.DB.prepare(
+      `SELECT COUNT(*) txCount, COALESCE(SUM(CASE WHEN i.status='verified' THEN i.amount ELSE 0 END),0) volume
+       FROM invoices i JOIN brands b ON b.id = i.brand_id WHERE b.user_id = ?`
+    ).bind(userId).first(),
+  ]);
+
+  return json(
+    {
+      user,
+      brands: (brands.results || []).map(brandPublic),
+      transactionCount: stats.txCount,
+      verifiedVolume: stats.volume,
+    },
+    200
+  );
+}
+
+async function adminUpdateUser(userId, request, env) {
+  const admin = await requireAdmin(request, env);
+  if (!admin) return json({ error: "Forbidden." }, 403);
+  const target = await env.DB.prepare(`SELECT * FROM users WHERE id = ?`).bind(userId).first();
+  if (!target) return json({ error: "User পাওয়া যায়নি।" }, 404);
+
+  const body = await readJson(request);
+  const name = body.name !== undefined ? String(body.name).trim().slice(0, 80) : target.name;
+  let email = target.email;
+  if (body.email !== undefined) {
+    email = String(body.email).trim().toLowerCase();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return json({ error: "সঠিক ইমেইল দিন।" }, 400);
+    const clash = await env.DB.prepare(`SELECT id FROM users WHERE email = ? AND id != ?`).bind(email, userId).first();
+    if (clash) return json({ error: "এই ইমেইল অন্য অ্যাকাউন্টে ব্যবহৃত হচ্ছে।" }, 409);
+  }
+
+  await env.DB.prepare(`UPDATE users SET name = ?, email = ? WHERE id = ?`).bind(name, email, userId).run();
+  await logAudit(env, admin.email, "user.edit", "user", userId, `name/email updated (${target.email} -> ${email})`, request);
+  return json({ ok: true }, 200);
 }
 
 async function adminToggleUser(userId, request, env) {
   const admin = await requireAdmin(request, env);
   if (!admin) return json({ error: "Forbidden." }, 403);
   const body = await readJson(request);
-  await env.DB.prepare(`UPDATE users SET suspended = ? WHERE id = ?`).bind(body.suspended ? 1 : 0, userId).run();
+  const suspended = body.suspended ? 1 : 0;
+  await env.DB.prepare(`UPDATE users SET suspended = ? WHERE id = ?`).bind(suspended, userId).run();
+  await logAudit(env, admin.email, suspended ? "user.suspend" : "user.unsuspend", "user", userId, null, request);
   return json({ ok: true }, 200);
 }
 
-async function adminListBrands(request, env) {
+// Forces every existing session for this account to stop working immediately
+// (bumping token_version invalidates all previously-issued tokens).
+async function adminForceLogout(userId, request, env) {
   const admin = await requireAdmin(request, env);
   if (!admin) return json({ error: "Forbidden." }, 403);
+  await env.DB.prepare(`UPDATE users SET token_version = token_version + 1 WHERE id = ?`).bind(userId).run();
+  await logAudit(env, admin.email, "user.force_logout", "user", userId, null, request);
+  return json({ ok: true }, 200);
+}
+
+// Admin sets a new temporary password for a user (e.g. locked-out account
+// recovery) and forces all their existing sessions to end.
+async function adminResetPassword(userId, request, env) {
+  const admin = await requireAdmin(request, env);
+  if (!admin) return json({ error: "Forbidden." }, 403);
+  const user = await env.DB.prepare(`SELECT id FROM users WHERE id = ?`).bind(userId).first();
+  if (!user) return json({ error: "User পাওয়া যায়নি।" }, 404);
+
+  const tempPassword = genId("", 12).toLowerCase() + Math.floor(Math.random() * 90 + 10);
+  await env.DB.prepare(
+    `UPDATE users SET password_hash = ?, token_version = token_version + 1, failed_login_attempts = 0, lockout_until = NULL WHERE id = ?`
+  )
+    .bind(await hashPassword(tempPassword), userId)
+    .run();
+  await logAudit(env, admin.email, "user.reset_password", "user", userId, "temporary password issued", request);
+  return json({ ok: true, tempPassword }, 200);
+}
+
+// Permanently deletes a user AND everything that belongs to them (brands,
+// invoices, sms logs). Irreversible — the UI requires a typed confirmation.
+async function adminDeleteUser(userId, request, env) {
+  const admin = await requireAdmin(request, env);
+  if (!admin) return json({ error: "Forbidden." }, 403);
+  const user = await env.DB.prepare(`SELECT email FROM users WHERE id = ?`).bind(userId).first();
+  if (!user) return json({ error: "User পাওয়া যায়নি।" }, 404);
+  if (isAdmin(user)) return json({ error: "Admin অ্যাকাউন্ট ডিলিট করা যাবে না।" }, 403);
+
+  const brandIds = (await env.DB.prepare(`SELECT id FROM brands WHERE user_id = ?`).bind(userId).all()).results || [];
+  for (const b of brandIds) {
+    await env.DB.prepare(`DELETE FROM sms_transactions WHERE brand_id = ?`).bind(b.id).run();
+    await env.DB.prepare(`DELETE FROM invoices WHERE brand_id = ?`).bind(b.id).run();
+  }
+  await env.DB.prepare(`DELETE FROM brands WHERE user_id = ?`).bind(userId).run();
+  await env.DB.prepare(`DELETE FROM users WHERE id = ?`).bind(userId).run();
+
+  await logAudit(env, admin.email, "user.delete", "user", userId, `deleted account ${user.email} (${brandIds.length} brands cascaded)`, request);
+  return json({ ok: true }, 200);
+}
+
+// ---- admin: brands ---------------------------------------------------
+
+async function adminListBrands(request, env, url) {
+  const admin = await requireAdmin(request, env);
+  if (!admin) return json({ error: "Forbidden." }, 403);
+  const search = (url.searchParams.get("q") || "").trim();
+  const where = search ? `WHERE b.name LIKE ? OR u.email LIKE ?` : "";
+  const params = search ? [`%${search}%`, `%${search}%`] : [];
   const rows = await env.DB.prepare(
-    `SELECT b.*, u.email AS owner_email FROM brands b JOIN users u ON u.id = b.user_id ORDER BY b.created_at DESC LIMIT 500`
-  ).all();
+    `SELECT b.*, u.email AS owner_email FROM brands b JOIN users u ON u.id = b.user_id ${where} ORDER BY b.created_at DESC LIMIT 300`
+  ).bind(...params).all();
   return json({ brands: (rows.results || []).map((b) => ({ ...brandPublic(b), ownerEmail: b.owner_email })) }, 200);
 }
 
@@ -642,7 +905,9 @@ async function adminToggleBrand(brandId, request, env) {
   const admin = await requireAdmin(request, env);
   if (!admin) return json({ error: "Forbidden." }, 403);
   const body = await readJson(request);
-  await env.DB.prepare(`UPDATE brands SET enabled = ? WHERE id = ?`).bind(body.enabled ? 1 : 0, brandId).run();
+  const enabled = body.enabled ? 1 : 0;
+  await env.DB.prepare(`UPDATE brands SET enabled = ? WHERE id = ?`).bind(enabled, brandId).run();
+  await logAudit(env, admin.email, enabled ? "brand.enable" : "brand.disable", "brand", brandId, null, request);
   return json({ ok: true }, 200);
 }
 
@@ -651,20 +916,24 @@ async function adminToggleBrandMethod(brandId, methodId, request, env) {
   if (!admin) return json({ error: "Forbidden." }, 403);
   if (!METHOD_IDS.includes(methodId)) return json({ error: "Unknown method." }, 400);
   const body = await readJson(request);
-  await env.DB.prepare(`UPDATE brands SET ${methodId}_enabled = ? WHERE id = ?`).bind(body.enabled ? 1 : 0, brandId).run();
+  const enabled = body.enabled ? 1 : 0;
+  await env.DB.prepare(`UPDATE brands SET ${methodId}_enabled = ? WHERE id = ?`).bind(enabled, brandId).run();
+  await logAudit(env, admin.email, "brand.method_toggle", "brand", brandId, `${methodId} -> ${enabled ? "on" : "off"}`, request);
   return json({ ok: true }, 200);
 }
 
-async function adminTransactions(request, env, url) {
+async function adminDeleteBrand(brandId, request, env) {
   const admin = await requireAdmin(request, env);
   if (!admin) return json({ error: "Forbidden." }, 403);
-  const limit = Math.min(Number(url.searchParams.get("limit")) || 50, 500);
-  const rows = await env.DB.prepare(
-    `SELECT i.id, i.reference, i.amount, i.method, i.status, i.trx_id, i.created_at, i.verified_at, b.name AS brand_name, u.email AS owner_email
-     FROM invoices i JOIN brands b ON b.id = i.brand_id JOIN users u ON u.id = b.user_id
-     ORDER BY i.created_at DESC LIMIT ?`
-  ).bind(limit).all();
-  return json({ transactions: rows.results || [] }, 200);
+  const brand = await env.DB.prepare(`SELECT name FROM brands WHERE id = ?`).bind(brandId).first();
+  if (!brand) return json({ error: "Brand পাওয়া যায়নি।" }, 404);
+
+  await env.DB.prepare(`DELETE FROM sms_transactions WHERE brand_id = ?`).bind(brandId).run();
+  await env.DB.prepare(`DELETE FROM invoices WHERE brand_id = ?`).bind(brandId).run();
+  await env.DB.prepare(`DELETE FROM brands WHERE id = ?`).bind(brandId).run();
+
+  await logAudit(env, admin.email, "brand.delete", "brand", brandId, `deleted brand "${brand.name}"`, request);
+  return json({ ok: true }, 200);
 }
 
 async function adminRegenerateBrandKey(brandId, request, env) {
@@ -674,8 +943,68 @@ async function adminRegenerateBrandKey(brandId, request, env) {
   if (!brand) return json({ error: "Brand পাওয়া যায়নি।" }, 404);
   const newKey = genId("BR", 32);
   await env.DB.prepare(`UPDATE brands SET api_key = ? WHERE id = ?`).bind(newKey, brandId).run();
+  await logAudit(env, admin.email, "brand.regenerate_key", "brand", brandId, null, request);
   return json({ apiKey: newKey }, 200);
 }
+
+// ---- admin: transactions ----------------------------------------------
+
+async function adminTransactions(request, env, url) {
+  const admin = await requireAdmin(request, env);
+  if (!admin) return json({ error: "Forbidden." }, 403);
+  const search = (url.searchParams.get("q") || "").trim();
+  const status = (url.searchParams.get("status") || "").trim();
+  const page = Math.max(1, Number(url.searchParams.get("page")) || 1);
+  const limit = Math.min(Number(url.searchParams.get("limit")) || 50, 200);
+  const offset = (page - 1) * limit;
+
+  const clauses = [];
+  const params = [];
+  if (search) {
+    clauses.push(`(i.id LIKE ? OR i.trx_id LIKE ? OR i.reference LIKE ? OR b.name LIKE ? OR u.email LIKE ?)`);
+    params.push(`%${search}%`, `%${search}%`, `%${search}%`, `%${search}%`, `%${search}%`);
+  }
+  if (status && ["pending", "verified", "expired"].includes(status)) {
+    clauses.push(`i.status = ?`);
+    params.push(status);
+  }
+  const where = clauses.length ? `WHERE ${clauses.join(" AND ")}` : "";
+
+  const [rows, countRow] = await Promise.all([
+    env.DB.prepare(
+      `SELECT i.id, i.reference, i.amount, i.method, i.status, i.trx_id, i.created_at, i.verified_at, b.name AS brand_name, u.email AS owner_email
+       FROM invoices i JOIN brands b ON b.id = i.brand_id JOIN users u ON u.id = b.user_id
+       ${where} ORDER BY i.created_at DESC LIMIT ? OFFSET ?`
+    ).bind(...params, limit, offset).all(),
+    env.DB.prepare(
+      `SELECT COUNT(*) c FROM invoices i JOIN brands b ON b.id = i.brand_id JOIN users u ON u.id = b.user_id ${where}`
+    ).bind(...params).first(),
+  ]);
+  return json({ transactions: rows.results || [], total: countRow.c, page, limit }, 200);
+}
+
+async function adminDeleteInvoice(invoiceId, request, env) {
+  const admin = await requireAdmin(request, env);
+  if (!admin) return json({ error: "Forbidden." }, 403);
+  const invoice = await env.DB.prepare(`SELECT id FROM invoices WHERE id = ?`).bind(invoiceId).first();
+  if (!invoice) return json({ error: "Invoice পাওয়া যায়নি।" }, 404);
+  await env.DB.prepare(`UPDATE sms_transactions SET matched_invoice_id = NULL WHERE matched_invoice_id = ?`).bind(invoiceId).run();
+  await env.DB.prepare(`DELETE FROM invoices WHERE id = ?`).bind(invoiceId).run();
+  await logAudit(env, admin.email, "invoice.delete", "invoice", invoiceId, null, request);
+  return json({ ok: true }, 200);
+}
+
+// ---- admin: audit log ---------------------------------------------------
+
+async function adminAuditLog(request, env, url) {
+  const admin = await requireAdmin(request, env);
+  if (!admin) return json({ error: "Forbidden." }, 403);
+  const limit = Math.min(Number(url.searchParams.get("limit")) || 100, 500);
+  const rows = await env.DB.prepare(`SELECT * FROM admin_audit_log ORDER BY created_at DESC LIMIT ?`).bind(limit).all();
+  return json({ logs: rows.results || [] }, 200);
+}
+
+
 
 async function adminAnalytics(request, env) {
   const admin = await requireAdmin(request, env);
@@ -728,9 +1057,14 @@ async function adminUpdateConfig(request, env) {
   if (!admin) return json({ error: "Forbidden." }, 403);
   const body = await readJson(request);
   const allowed = ["apk_url", "donate_bkash", "donate_nagad", "donate_note", "site_name", "support_email"];
+  const changed = [];
   for (const key of allowed) {
-    if (body[key] !== undefined) await setConfigValue(env, key, String(body[key]).slice(0, 1000));
+    if (body[key] !== undefined) {
+      await setConfigValue(env, key, String(body[key]).slice(0, 1000));
+      changed.push(key);
+    }
   }
+  if (changed.length) await logAudit(env, admin.email, "config.update", "config", null, changed.join(", "), request);
   return json({ ok: true }, 200);
 }
 
@@ -771,21 +1105,38 @@ export async function handleApi(request, env, ctx, url) {
   // public config
   if (pathname === "/api/config/public" && method === "GET") return await publicConfig(request, env);
 
-  // admin
+  // admin — dashboard/stats
   if (pathname === "/api/admin/stats" && method === "GET") return await adminStats(request, env);
-  if (pathname === "/api/admin/users" && method === "GET") return await adminListUsers(request, env);
+  if (pathname === "/api/admin/analytics" && method === "GET") return await adminAnalytics(request, env);
+  if (pathname === "/api/admin/audit-log" && method === "GET") return await adminAuditLog(request, env, url);
+
+  // admin — users
+  if (pathname === "/api/admin/users" && method === "GET") return await adminListUsers(request, env, url);
+  if ((m = pathname.match(/^\/api\/admin\/users\/([a-zA-Z0-9-]+)$/)) && method === "GET") return await adminUserDetail(m[1], request, env);
+  if ((m = pathname.match(/^\/api\/admin\/users\/([a-zA-Z0-9-]+)$/)) && method === "POST") return await adminUpdateUser(m[1], request, env);
   if ((m = pathname.match(/^\/api\/admin\/users\/([a-zA-Z0-9-]+)\/toggle$/)) && method === "POST") return await adminToggleUser(m[1], request, env);
-  if (pathname === "/api/admin/brands" && method === "GET") return await adminListBrands(request, env);
+  if ((m = pathname.match(/^\/api\/admin\/users\/([a-zA-Z0-9-]+)\/force-logout$/)) && method === "POST") return await adminForceLogout(m[1], request, env);
+  if ((m = pathname.match(/^\/api\/admin\/users\/([a-zA-Z0-9-]+)\/reset-password$/)) && method === "POST") return await adminResetPassword(m[1], request, env);
+  if ((m = pathname.match(/^\/api\/admin\/users\/([a-zA-Z0-9-]+)\/delete$/)) && method === "POST") return await adminDeleteUser(m[1], request, env);
+
+  // admin — brands
+  if (pathname === "/api/admin/brands" && method === "GET") return await adminListBrands(request, env, url);
   if ((m = pathname.match(/^\/api\/admin\/brands\/([a-zA-Z0-9-]+)\/toggle$/)) && method === "POST") return await adminToggleBrand(m[1], request, env);
   if ((m = pathname.match(/^\/api\/admin\/brands\/([a-zA-Z0-9-]+)\/methods\/([a-z]+)\/toggle$/)) && method === "POST")
     return await adminToggleBrandMethod(m[1], m[2], request, env);
   if ((m = pathname.match(/^\/api\/admin\/brands\/([a-zA-Z0-9-]+)\/regenerate-key$/)) && method === "POST")
     return await adminRegenerateBrandKey(m[1], request, env);
+  if ((m = pathname.match(/^\/api\/admin\/brands\/([a-zA-Z0-9-]+)\/delete$/)) && method === "POST") return await adminDeleteBrand(m[1], request, env);
+
+  // admin — transactions
   if (pathname === "/api/admin/transactions" && method === "GET") return await adminTransactions(request, env, url);
-  if (pathname === "/api/admin/analytics" && method === "GET") return await adminAnalytics(request, env);
+  if ((m = pathname.match(/^\/api\/admin\/transactions\/([a-zA-Z0-9-]+)\/delete$/)) && method === "POST")
+    return await adminDeleteInvoice(m[1], request, env);
+
+  // admin — site config
   if (pathname === "/api/admin/config" && method === "POST") return await adminUpdateConfig(request, env);
 
   return json({ error: "Not found." }, 404);
 }
 
-export { CONFIG, corsHeaders, json };
+export { CONFIG, corsHeaders, securityHeaders, json };
