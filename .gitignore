@@ -1,3 +1,13 @@
 node_modules/
 .wrangler/
 .dev.vars
+
+# Android (built by CI, not committed)
+android/.gradle/
+android/build/
+android/app/build/
+android/local.properties
+android/gradlew
+android/gradlew.bat
+android/gradle/
+*.apk
