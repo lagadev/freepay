@@ -32,11 +32,11 @@
   if (!rows.length) { body.innerHTML = '<tr><td colspan="5" class="empty">No records found.</td></tr>'; return; }
   body.innerHTML = rows.map((t) => `
     <tr>
-      <td class="mono">${t.id}${t.reference ? " · " + t.reference : ""}<br><span style="color:var(--muted);font-size:11px;">${PL.fmtDate(t.created_at)}</span></td>
-      <td>${t.brand_name}</td>
-      <td>${t.method ? `<span class="methodchip"><img src="/assets/logos/${t.method}.svg" alt="${t.method}">${t.method}</span>` : "—"}</td>
+      <td class="mono">${PL.esc(t.id)}${t.reference ? " · " + PL.esc(t.reference) : ""}<br><span style="color:var(--muted);font-size:11px;">${PL.fmtDate(t.created_at)}</span></td>
+      <td>${PL.esc(t.brand_name)}</td>
+      <td>${t.method ? `<span class="methodchip"><img src="/assets/logos/${PL.esc(t.method)}.svg" alt="${PL.esc(t.method)}">${PL.esc(t.method)}</span>` : "—"}</td>
       <td class="mono">৳${PL.fmt(t.amount)}</td>
-      <td><span class="badge ${t.status}">${t.status.toUpperCase()}</span></td>
+      <td><span class="badge ${t.status}">${PL.esc(t.status.toUpperCase())}</span></td>
     </tr>`).join("");
 })();
 </script>
