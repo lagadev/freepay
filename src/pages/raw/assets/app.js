@@ -13,6 +13,8 @@ window.PL = (function () {
     copy: '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a1 1 0 01-1-1V4a1 1 0 011-1h10a1 1 0 011 1v1"/></svg>',
     good: '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>',
     bad: '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6L6 18M6 6l12 12"/></svg>',
+    menu: '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M4 12h16M4 17h16"/></svg>',
+    chevron: '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>',
   };
 
   const NAV_ITEMS = [
@@ -32,6 +34,20 @@ window.PL = (function () {
     const d = new Date(ms);
     return d.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }) + ", " +
       d.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" });
+  }
+
+  // Escapes any user-controlled string before it's inserted into innerHTML
+  // (brand names, user names/emails, invoice references, TrxIDs, raw SMS
+  // text, admin audit-log details...). Every page that renders such values
+  // MUST run them through this first — it's the single most important line
+  // of defense against stored XSS in this app.
+  function esc(value) {
+    return String(value === null || value === undefined ? "" : value)
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#39;");
   }
 
   async function api(path, opts) {
@@ -61,30 +77,39 @@ window.PL = (function () {
     const host = ensureToastHost();
     const el = document.createElement("div");
     el.className = "toast " + (kind || "");
-    el.innerHTML = (kind === "good" ? ICONS.good : kind === "bad" ? ICONS.bad : "") + "<div>" + message + "</div>";
+    el.innerHTML = (kind === "good" ? ICONS.good : kind === "bad" ? ICONS.bad : "") + "<div>" + esc(message) + "</div>";
     host.appendChild(el);
     setTimeout(() => { el.style.opacity = "0"; el.style.transition = "opacity .3s"; setTimeout(() => el.remove(), 300); }, 3600);
   }
 
+  // ---- nav: everything lives inside one "Menu" dropdown button ----------
+
   function renderNav(active, user) {
     const initial = ((user && (user.name || user.email)) || "U").trim().charAt(0).toUpperCase();
+    const activeItem = NAV_ITEMS.find((n) => n.id === active);
+    const currentLabel = active === "admin" ? "Admin" : activeItem ? activeItem.label : "Menu";
+
     const links = NAV_ITEMS.map(
       (n) => `<a href="${n.href}" class="${n.id === active ? "active" : ""}">${ICONS[n.icon]}<span>${n.label}</span></a>`
     ).join("");
     const adminLink = user && user.isAdmin
       ? `<a href="/app/admin/index.html" class="${active === "admin" ? "active" : ""}">${ICONS.admin}<span>Admin</span></a>`
       : "";
+
     return `
       <div class="navbar"><div class="navbar-inner">
         <a href="/app/dashboard.html" class="brand-logo"><img src="/assets/logos/freepay.svg" alt="FreePay">FreePay</a>
-        <div class="navlinks">${links}${adminLink}</div>
+        <div class="navMenuWrap">
+          <button class="navMenuBtn" id="plMenuBtn" aria-haspopup="true" aria-expanded="false">
+            ${ICONS.menu}<span>${esc(currentLabel)}</span>${ICONS.chevron}
+          </button>
+          <div class="navMenuPanel" id="plMenuPanel">${links}${adminLink}</div>
+        </div>
         <div class="navuser">
-          <button class="navHamburger" id="plHamburger" aria-label="Menu"><span></span></button>
-          <div class="navavatar" title="${user ? user.email : ""}">${initial}</div>
+          <div class="navavatar" title="${esc(user ? user.email : "")}">${esc(initial)}</div>
           <button class="iconbtn" id="plLogoutBtn" title="Logout">${ICONS.logout}</button>
         </div>
-      </div></div>
-      <div class="mobileNavPanel" id="plMobilePanel">${links}${adminLink}</div>`;
+      </div></div>`;
   }
 
   function mountNav(active, user) {
@@ -97,17 +122,25 @@ window.PL = (function () {
       location.href = "/app/login.html";
     });
 
-    const hamburger = document.getElementById("plHamburger");
-    const panel = document.getElementById("plMobilePanel");
-    if (hamburger && panel) {
-      hamburger.addEventListener("click", () => {
-        const open = panel.classList.toggle("open");
-        hamburger.classList.toggle("open", open);
+    const menuBtn = document.getElementById("plMenuBtn");
+    const menuPanel = document.getElementById("plMenuPanel");
+    if (menuBtn && menuPanel) {
+      const closeMenu = () => {
+        menuPanel.classList.remove("open");
+        menuBtn.classList.remove("open");
+        menuBtn.setAttribute("aria-expanded", "false");
+      };
+      menuBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        const open = menuPanel.classList.toggle("open");
+        menuBtn.classList.toggle("open", open);
+        menuBtn.setAttribute("aria-expanded", String(open));
       });
-      panel.querySelectorAll("a").forEach((a) => a.addEventListener("click", () => {
-        panel.classList.remove("open");
-        hamburger.classList.remove("open");
-      }));
+      document.addEventListener("click", (e) => {
+        if (!menuPanel.contains(e.target) && e.target !== menuBtn) closeMenu();
+      });
+      document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeMenu(); });
+      menuPanel.querySelectorAll("a").forEach((a) => a.addEventListener("click", closeMenu));
     }
   }
 
@@ -138,9 +171,31 @@ window.PL = (function () {
     navigator.clipboard.writeText(text).then(() => {
       const orig = btn.innerHTML;
       btn.textContent = "Copied!";
-      setTimeout(() => (btn.innerHTML = orig), 1300);
+      btn.classList.add("copied");
+      setTimeout(() => { btn.innerHTML = orig; btn.classList.remove("copied"); }, 1300);
     });
   }
 
-  return { ICONS, fmt, fmtDate, api, toast, renderNav, mountNav, requireAuth, requireAdmin, copyText };
+  // Adds a floating "Copy" button to the top-right corner of every <pre>
+  // inside `container` (or the whole document if omitted). Used by docs.html
+  // so every code example can be copied with one click.
+  function attachCopyButtons(container) {
+    const root = container || document;
+    root.querySelectorAll("pre").forEach((pre) => {
+      if (pre.dataset.copyReady) return;
+      pre.dataset.copyReady = "1";
+      pre.style.position = "relative";
+      const btn = document.createElement("button");
+      btn.className = "codeCopyBtn";
+      btn.type = "button";
+      btn.innerHTML = ICONS.copy + "<span>Copy</span>";
+      btn.addEventListener("click", () => copyText(pre.innerText, btn));
+      pre.appendChild(btn);
+    });
+  }
+
+  return {
+    ICONS, fmt, fmtDate, esc, api, toast, renderNav, mountNav,
+    requireAuth, requireAdmin, copyText, attachCopyButtons,
+  };
 })();
