@@ -26,11 +26,11 @@
   const { donateBkash, donateNagad, donateNote } = r.data;
   if (!donateBkash && !donateNagad) { card.innerHTML = '<div class="empty">এখনো কোনো ডোনেট নাম্বার সেট করা হয়নি।</div>'; return; }
   card.innerHTML = `
-    ${donateBkash ? `<div class="switch-row" style="border-top:none;"><div class="meta"><img src="/assets/logos/bkash.svg" alt="bKash" style="width:32px;height:32px;border-radius:9px;"><div><div style="font-weight:700;">bKash</div><div class="mono" style="font-size:13px;">${donateBkash}</div></div></div>
-      <button class="btn btn-ghost btn-sm" onclick="PL.copyText('${donateBkash}', this)">📋</button></div>` : ""}
-    ${donateNagad ? `<div class="switch-row"><div class="meta"><img src="/assets/logos/nagad.svg" alt="Nagad" style="width:32px;height:32px;border-radius:9px;"><div><div style="font-weight:700;">Nagad</div><div class="mono" style="font-size:13px;">${donateNagad}</div></div></div>
-      <button class="btn btn-ghost btn-sm" onclick="PL.copyText('${donateNagad}', this)">📋</button></div>` : ""}
-    ${donateNote ? `<p style="font-size:12.5px;color:var(--muted);margin-top:14px;">${donateNote}</p>` : ""}
+    ${donateBkash ? `<div class="switch-row" style="border-top:none;"><div class="meta"><img src="/assets/logos/bkash.svg" alt="bKash" style="width:32px;height:32px;border-radius:9px;"><div><div style="font-weight:700;">bKash</div><div class="mono" style="font-size:13px;">${PL.esc(donateBkash)}</div></div></div>
+      <button class="btn btn-ghost btn-sm" onclick="PL.copyText('${PL.esc(donateBkash)}', this)">📋</button></div>` : ""}
+    ${donateNagad ? `<div class="switch-row"><div class="meta"><img src="/assets/logos/nagad.svg" alt="Nagad" style="width:32px;height:32px;border-radius:9px;"><div><div style="font-weight:700;">Nagad</div><div class="mono" style="font-size:13px;">${PL.esc(donateNagad)}</div></div></div>
+      <button class="btn btn-ghost btn-sm" onclick="PL.copyText('${PL.esc(donateNagad)}', this)">📋</button></div>` : ""}
+    ${donateNote ? `<p style="font-size:12.5px;color:var(--muted);margin-top:14px;">${PL.esc(donateNote)}</p>` : ""}
   `;
 })();
 </script>
