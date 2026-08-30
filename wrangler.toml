@@ -5,4 +5,4 @@ compatibility_date = "2026-01-01"
 [[d1_databases]]
 binding = "DB"
 database_name = "freepay-db"
-database_id = "REPLACE_WITH_YOUR_D1_DATABASE_ID"
+database_id = "f1f9944f-e832-414b-abb8-5f27908c0004"
