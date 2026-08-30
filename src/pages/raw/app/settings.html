@@ -40,10 +40,10 @@
 
   list.innerHTML = brands.map((b) => `
     <div style="border-top:1px solid var(--line);padding:14px 0;">
-      <div style="font-weight:700;font-size:13.5px;margin-bottom:8px;">${b.name}</div>
-      <div class="keyval" id="key_${b.id}">${b.apiKey}</div>
+      <div style="font-weight:700;font-size:13.5px;margin-bottom:8px;">${PL.esc(b.name)}</div>
+      <div class="keyval" id="key_${b.id}">${PL.esc(b.apiKey)}</div>
       <div style="display:flex;gap:8px;">
-        <button class="btn btn-ghost btn-sm copybtn" data-key="${b.apiKey}">📋 Copy</button>
+        <button class="btn btn-ghost btn-sm copybtn" data-key="${PL.esc(b.apiKey)}">📋 Copy</button>
         <button class="btn btn-danger btn-sm regenbtn" data-id="${b.id}">↻ Regenerate</button>
       </div>
     </div>`).join("");
