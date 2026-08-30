@@ -76,24 +76,89 @@ these are FreePay's own stylized badges, not reproductions of the actual
 trademarked wallet logos. They're used consistently across the landing page,
 nav bar, pay page, brand management, download, donate, and admin panel.
 
-The dashboard nav collapses to a hamburger + slide-down panel under 760px,
-matching the landing page's own mobile menu pattern.
+**Navigation**: every dashboard page's nav is a single elegant "Menu"
+dropdown button (`PL.renderNav`) — no separate desktop-links-row +
+mobile-hamburger split. One consistent pattern at every screen size, closes
+on outside-click/Escape/link-click.
+
+v3 polish pass: refined shadow depth (`--shadow-sm/--shadow/--shadow-lg`),
+consistent `--ease` cubic-bezier transitions on every interactive element
+(cards, buttons, switches, table rows), sharper focus rings on inputs,
+button press feedback, and a proper modal/dialog system for admin actions.
+
+## Security (v3)
+
+- **Login lockout**: 5 wrong passwords locks that account for 15 minutes —
+  even the correct password won't work until it clears. Independent of IP,
+  so a distributed attack against one account still gets stopped.
+- **Rate limiting**: signup, login (per-IP), and TrxID verification
+  (per-invoice) are all rate-limited against brute-force/spam via a D1-backed
+  sliding window (`rate_limits` table).
+- **Session invalidation**: every user has a `token_version`. Admin can force
+  someone's active sessions to die instantly (Admin Panel → Users → Force
+  Logout / Reset Password) without needing a server-side session store.
+- **XSS hardening**: every place user-controlled text (brand names, invoice
+  references, TrxIDs, user names/emails) gets inserted into the page now
+  goes through `PL.esc()` before hitting `innerHTML`. This closes a real
+  stored-XSS gap that existed before — a brand name like
+  `<img src=x onerror=...>` would previously have executed in anyone
+  viewing that data (dashboard, admin panel, or the public pay page).
+- **Response security headers** on every request: CSP (scripts/styles/fonts
+  locked to this origin + Google Fonts), `X-Frame-Options: DENY`
+  (clickjacking), `X-Content-Type-Options: nosniff`, HSTS, and a locked-down
+  `Permissions-Policy`.
+- **Timing-safe login**: a login attempt for a nonexistent email still pays
+  the same password-hashing cost as a real one, so response time can't be
+  used to enumerate which emails have accounts.
+- **Audit log**: every admin mutation (suspend, delete, edit, config change,
+  force-logout, password reset, key regeneration...) is recorded with who,
+  what, when, and from which IP — visible in Admin Panel → Audit Log.
+- Passwords already use PBKDF2 (120k iterations) + per-user salt; SQL is
+  100% parameterized (D1 `.bind()`) everywhere, so there's no SQL injection
+  surface to begin with.
+
+If you deployed FreePay **before** this update, run the migration once:
+```bash
+wrangler d1 execute freepay-db --remote --file=./migrations/001_security_hardening.sql
+```
 
 ## Admin Panel features
 
 - **Analytics** — 7-day daily verified-volume bar chart, top brands by
   volume, recent signups, per-method revenue breakdown
-- **Users** — suspend/unsuspend any account
+- **Users** — search + pagination, click into any user to see their brands
+  and stats, **edit** name/email, **suspend/unsuspend**, **force logout**
+  (kills all their sessions instantly), **reset password** (issues a new
+  temp password), and **permanently delete** an account (cascades to their
+  brands/invoices/SMS logs)
 - **Brands** — enable/disable any brand or any single payment method on it,
-  and regenerate any brand's API key directly (support/security tool)
-- **Transactions** — every invoice platform-wide, with CSV export
+  regenerate any brand's API key, and **delete** a brand outright
+  (cascades to its invoices/SMS logs)
+- **Transactions** — search across invoice ID/TrxID/brand/owner, filter by
+  status, paginated, **delete** any transaction, CSV export
+- **Audit Log** — full history of every admin action taken on the site
 - **Site Settings** — site name, support email, APK download URL, donate
   numbers — all admin-editable at runtime (no redeploy needed)
 
+Every list/detail view uses the same danger-aware confirmation modal before
+anything destructive happens (delete, suspend, reset password, etc).
+
 ## Docs page
 
-`/app/docs.html` now has language-tabbed code examples (cURL / Node.js /
-Python / PHP) for both invoice creation and webhook verification.
+`/app/docs.html` has language-tabbed code examples (cURL / Node.js /
+Python / PHP) for both invoice creation and webhook verification — and every
+code block now has a one-click **Copy** button (`PL.attachCopyButtons()`).
+
+## Android app (FreePay Sync)
+
+`android/` has the full source for the SMS-forwarding companion app —
+login with a Brand API Key, live list of every captured SMS with its sync
+status, and a persistent Telegram support banner (**@devugly**).
+
+It's built entirely by CI (`.github/workflows/release.yml`) — push a tag like
+`android-v1.0.0` or run the workflow manually from the Actions tab, and a
+debug-signed `freepay-sync.apk` gets attached to a new GitHub Release. See
+`android/README.md` for full details.
 
 ## Not included yet
 
@@ -102,5 +167,3 @@ Python / PHP) for both invoice creation and webhook verification.
   only right now)
 - Binance Pay / TON automatic crypto rail (different settlement mechanism,
   not SMS-based — separate integration)
-- The Android SMS-forwarder app still targets the older single-user API;
-  it hasn't been reworked for the brand/multi-method model yet.
