@@ -70,7 +70,7 @@
     select.innerHTML = '<option>প্রথমে একটা Brand তৈরি করুন</option>';
     return;
   }
-  select.innerHTML = brands.map((b) => `<option value="${b.apiKey}">${b.name}</option>`).join("");
+  select.innerHTML = brands.map((b) => `<option value="${PL.esc(b.apiKey)}">${PL.esc(b.name)}</option>`).join("");
   const updateKey = () => (document.getElementById("keyVal").textContent = select.value);
   select.addEventListener("change", updateKey);
   updateKey();
