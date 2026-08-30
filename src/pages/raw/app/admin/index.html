@@ -8,7 +8,8 @@
 <link rel="stylesheet" href="/assets/style.css">
 <style>
 .tabs{display:flex;gap:8px;margin-bottom:20px;overflow-x:auto;}
-.tabbtn{background:var(--card);border:1px solid var(--line);border-radius:11px;padding:9px 16px;font-weight:700;font-size:12.5px;cursor:pointer;white-space:nowrap;}
+.tabbtn{background:var(--card);border:1px solid var(--line);border-radius:11px;padding:9px 16px;font-weight:700;font-size:12.5px;cursor:pointer;white-space:nowrap;transition:.15s var(--ease);}
+.tabbtn:hover{border-color:var(--violet);}
 .tabbtn.active{background:var(--ink);color:#fff;border-color:var(--ink);}
 .tabpanel{display:none;}
 .tabpanel.active{display:block;}
@@ -19,19 +20,24 @@
 .miniList{display:flex;flex-direction:column;gap:0;}
 .miniRow{display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-top:1px solid var(--line);font-size:12.5px;}
 .miniRow:first-child{border-top:none;}
+.toolbar{display:flex;gap:10px;margin-bottom:14px;flex-wrap:wrap;align-items:center;}
+.toolbar .searchbox{flex:1;min-width:200px;}
+.linkbtn{background:none;border:none;color:var(--violet-deep);font-weight:700;font-size:12.5px;cursor:pointer;padding:0;}
+.linkbtn:hover{text-decoration:underline;}
+.statusPill{font-size:10px;font-weight:800;padding:3px 8px;border-radius:999px;}
 </style>
 </head>
 <body>
 <div id="navSlot"></div>
 <div class="page">
   <h1 class="pagetitle">Admin Panel</h1>
-  <p class="pagesub">সাইটের প্রতিটা ইউজার, ব্র্যান্ড, এবং ট্রানজেকশন এখান থেকে সম্পূর্ণ নিয়ন্ত্রণ করুন।</p>
+  <p class="pagesub">সাইটের প্রতিটা ইউজার, ব্র্যান্ড, এবং ট্রানজেকশন এখান থেকে সম্পূর্ণ নিয়ন্ত্রণ করুন — এডিট, ডিলিট, সাসপেন্ড, সব।</p>
 
   <div class="grid4" id="statGrid">
     <div class="stat-box"><div class="l">Users</div><div class="v" id="stUsers">—</div></div>
     <div class="stat-box"><div class="l">Brands</div><div class="v" id="stBrands">—</div></div>
     <div class="stat-box"><div class="l">Verified Volume</div><div class="v mono" id="stVolume">—</div></div>
-    <div class="stat-box"><div class="l">Verified Count</div><div class="v" id="stVerified">—</div></div>
+    <div class="stat-box"><div class="l">Suspended / Locked</div><div class="v" id="stFlags">—</div></div>
   </div>
 
   <div class="tabs" style="margin-top:24px;">
@@ -39,9 +45,11 @@
     <button class="tabbtn" data-tab="users">Users</button>
     <button class="tabbtn" data-tab="brands">Brands</button>
     <button class="tabbtn" data-tab="tx">Transactions</button>
+    <button class="tabbtn" data-tab="audit">Audit Log</button>
     <button class="tabbtn" data-tab="config">Site Settings</button>
   </div>
 
+  <!-- ================= ANALYTICS ================= -->
   <div class="tabpanel active" id="tab-analytics">
     <div class="card">
       <div class="sectiontitle">গত ৭ দিনের ভেরিফাইড ভলিউম</div>
@@ -63,27 +71,64 @@
     </div>
   </div>
 
+  <!-- ================= USERS ================= -->
   <div class="tabpanel" id="tab-users">
+    <div class="toolbar">
+      <div class="searchbox">
+        <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
+        <input type="text" id="userSearch" placeholder="Email বা নাম দিয়ে খুঁজুন..." />
+      </div>
+    </div>
     <div class="card" style="padding:0;overflow-x:auto;">
       <table class="tx"><thead><tr><th>Email</th><th>Name</th><th>Joined</th><th>Status</th><th></th></tr></thead>
         <tbody id="usersBody"><tr><td colspan="5" class="empty">লোড হচ্ছে...</td></tr></tbody></table>
     </div>
+    <div class="pagination" id="usersPagination"></div>
   </div>
 
+  <!-- ================= BRANDS ================= -->
   <div class="tabpanel" id="tab-brands">
+    <div class="toolbar">
+      <div class="searchbox">
+        <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
+        <input type="text" id="brandSearch" placeholder="Brand নাম বা owner email দিয়ে খুঁজুন..." />
+      </div>
+    </div>
     <div id="brandsBody"><div class="empty">লোড হচ্ছে...</div></div>
   </div>
 
+  <!-- ================= TRANSACTIONS ================= -->
   <div class="tabpanel" id="tab-tx">
-    <div style="display:flex;justify-content:flex-end;margin-bottom:12px;">
+    <div class="toolbar">
+      <div class="searchbox" style="flex:2;">
+        <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
+        <input type="text" id="txSearch" placeholder="Invoice ID, TrxID, Brand, বা Owner email দিয়ে খুঁজুন..." />
+      </div>
+      <select id="txStatusFilter" style="border:1.5px solid var(--line);border-radius:12px;padding:10px 12px;font-size:13px;">
+        <option value="">সব Status</option>
+        <option value="pending">Pending</option>
+        <option value="verified">Verified</option>
+        <option value="expired">Expired</option>
+      </select>
       <button class="btn btn-ghost btn-sm" id="exportCsvBtn">⬇ Export CSV</button>
     </div>
     <div class="card" style="padding:0;overflow-x:auto;">
-      <table class="tx"><thead><tr><th>Invoice</th><th>Brand</th><th>Owner</th><th>Method</th><th>Amount</th><th>Status</th></tr></thead>
-        <tbody id="adminTxBody"><tr><td colspan="6" class="empty">লোড হচ্ছে...</td></tr></tbody></table>
+      <table class="tx"><thead><tr><th>Invoice</th><th>Brand</th><th>Owner</th><th>Method</th><th>Amount</th><th>Status</th><th></th></tr></thead>
+        <tbody id="adminTxBody"><tr><td colspan="7" class="empty">লোড হচ্ছে...</td></tr></tbody></table>
+    </div>
+    <div class="pagination" id="txPagination"></div>
+  </div>
+
+  <!-- ================= AUDIT LOG ================= -->
+  <div class="tabpanel" id="tab-audit">
+    <p class="pagesub" style="margin-bottom:14px;">প্রতিটা admin action (suspend, delete, edit, config change...) এখানে রেকর্ড হয়।</p>
+    <div class="card" style="padding:0;overflow-x:auto;">
+      <table class="tx"><thead><tr><th>Time</th><th>Admin</th><th>Action</th><th>Target</th><th>Detail</th><th>IP</th></tr></thead>
+        <tbody id="auditBody"><tr><td colspan="6" class="empty">লোড হচ্ছে...</td></tr></tbody></table>
     </div>
   </div>
 
+  <!-- ================= SITE SETTINGS ================= -->
   <div class="tabpanel" id="tab-config">
     <div class="card">
       <h3 style="margin:0 0 14px;font-size:14.5px;">Site</h3>
@@ -107,10 +152,23 @@
     <button class="btn btn-primary" id="saveConfigBtn">সেভ করুন</button>
   </div>
 </div>
+
+<!-- ================= USER DETAIL MODAL ================= -->
+<div class="modalOverlay" id="userModal">
+  <div class="modalBox" id="userModalBox"></div>
+</div>
+
+<!-- ================= CONFIRM MODAL (generic) ================= -->
+<div class="modalOverlay" id="confirmModal">
+  <div class="modalBox" id="confirmModalBox"></div>
+</div>
+
 <script src="/assets/app.js"></script>
 <script>
 const METHODS = ["bkash", "nagad", "upay", "rocket", "cellfin"];
 let lastTxRows = [];
+let usersState = { page: 1, q: "", total: 0, limit: 25 };
+let txState = { page: 1, q: "", status: "", total: 0, limit: 50 };
 
 document.querySelectorAll(".tabbtn").forEach((btn) => btn.addEventListener("click", () => {
   document.querySelectorAll(".tabbtn").forEach((b) => b.classList.remove("active"));
@@ -119,75 +177,235 @@ document.querySelectorAll(".tabbtn").forEach((btn) => btn.addEventListener("clic
   document.getElementById("tab-" + btn.dataset.tab).classList.add("active");
 }));
 
+// ---- generic modal helpers ----
+function openModal(id) { document.getElementById(id).classList.add("open"); }
+function closeModal(id) { document.getElementById(id).classList.remove("open"); }
+document.querySelectorAll(".modalOverlay").forEach((ov) => ov.addEventListener("click", (e) => {
+  if (e.target === ov) ov.classList.remove("open");
+}));
+
+function confirmAction({ title, message, danger, confirmLabel, onConfirm }) {
+  const box = document.getElementById("confirmModalBox");
+  box.innerHTML = `
+    <h3>${PL.esc(title)}</h3>
+    <div class="${danger ? "dangerBox" : "infoBox"}">${message}</div>
+    <div class="modalActions">
+      <button class="btn btn-ghost" id="confirmCancelBtn">বাতিল</button>
+      <button class="btn ${danger ? "btn-danger" : "btn-primary"}" id="confirmOkBtn">${PL.esc(confirmLabel || "নিশ্চিত")}</button>
+    </div>`;
+  document.getElementById("confirmCancelBtn").addEventListener("click", () => closeModal("confirmModal"));
+  document.getElementById("confirmOkBtn").addEventListener("click", async () => {
+    closeModal("confirmModal");
+    await onConfirm();
+  });
+  openModal("confirmModal");
+}
+
+// ---- pagination renderer ----
+function renderPagination(hostId, state, onPage) {
+  const host = document.getElementById(hostId);
+  const totalPages = Math.max(1, Math.ceil(state.total / state.limit));
+  if (totalPages <= 1) { host.innerHTML = ""; return; }
+  let html = `<button ${state.page === 1 ? "disabled" : ""} data-p="${state.page - 1}">‹</button>`;
+  html += `<span class="pageinfo">${state.page} / ${totalPages} (${state.total} total)</span>`;
+  html += `<button ${state.page === totalPages ? "disabled" : ""} data-p="${state.page + 1}">›</button>`;
+  host.innerHTML = html;
+  host.querySelectorAll("button[data-p]").forEach((btn) => btn.addEventListener("click", () => onPage(Number(btn.dataset.p))));
+}
+
+// ================= STATS =================
 async function loadStats() {
   const r = await PL.api("/admin/stats");
   if (!r.ok) return;
   document.getElementById("stUsers").textContent = r.data.users;
   document.getElementById("stBrands").textContent = r.data.brands;
   document.getElementById("stVolume").textContent = "৳" + PL.fmt(r.data.verifiedVolume);
-  document.getElementById("stVerified").textContent = r.data.verifiedCount;
+  document.getElementById("stFlags").textContent = `${r.data.suspendedUsers} / ${r.data.lockedUsers}`;
 }
 
+// ================= ANALYTICS =================
 async function loadAnalytics() {
   const r = await PL.api("/admin/analytics");
   if (!r.ok) return;
   const { daily, topBrands, recentUsers, methodBreakdown } = r.data;
 
   const maxVol = Math.max(1, ...daily.map((d) => d.volume));
-  const chart = document.getElementById("revenueChart");
-  chart.innerHTML = daily.map((d) => {
+  document.getElementById("revenueChart").innerHTML = daily.map((d) => {
     const h = Math.max(4, Math.round((d.volume / maxVol) * 110));
     const label = new Date(d.day).toLocaleDateString("en-GB", { day: "2-digit", month: "short" });
     return `<div class="barwrap"><div class="bar" style="height:${h}px"><span class="bval">৳${PL.fmt(d.volume)}</span></div><div class="blabel">${label}</div></div>`;
   }).join("");
 
-  const topList = document.getElementById("topBrandsList");
-  topList.innerHTML = topBrands.length ? topBrands.map((b) => `
-    <div class="miniRow"><div><b>${b.name}</b><div style="color:var(--muted);font-size:11px;">${b.ownerEmail}</div></div>
+  document.getElementById("topBrandsList").innerHTML = topBrands.length ? topBrands.map((b) => `
+    <div class="miniRow"><div><b>${PL.esc(b.name)}</b><div style="color:var(--muted);font-size:11px;">${PL.esc(b.ownerEmail)}</div></div>
     <div style="text-align:right;"><div class="mono">৳${PL.fmt(b.volume)}</div><div style="color:var(--muted);font-size:11px;">${b.count} tx</div></div></div>`).join("")
     : '<div class="empty">কোনো ডেটা নেই।</div>';
 
-  const usersList = document.getElementById("recentUsersList");
-  usersList.innerHTML = recentUsers.length ? recentUsers.map((u) => `
-    <div class="miniRow"><div><b>${u.name || u.email.split("@")[0]}</b><div style="color:var(--muted);font-size:11px;">${u.email}</div></div>
+  document.getElementById("recentUsersList").innerHTML = recentUsers.length ? recentUsers.map((u) => `
+    <div class="miniRow"><div><b>${PL.esc(u.name || u.email.split("@")[0])}</b><div style="color:var(--muted);font-size:11px;">${PL.esc(u.email)}</div></div>
     <div style="color:var(--muted);font-size:11px;">${PL.fmtDate(u.created_at)}</div></div>`).join("")
     : '<div class="empty">কোনো ইউজার নেই।</div>';
 
-  const mb = document.getElementById("methodBreakdownList");
-  mb.innerHTML = methodBreakdown.length ? methodBreakdown.map((m) => `
-    <div class="miniRow"><div class="methodchip"><img src="/assets/logos/${m.method}.svg" alt="${m.method}"> ${m.method}</div>
+  document.getElementById("methodBreakdownList").innerHTML = methodBreakdown.length ? methodBreakdown.map((m) => `
+    <div class="miniRow"><div class="methodchip"><img src="/assets/logos/${PL.esc(m.method)}.svg" alt="${PL.esc(m.method)}"> ${PL.esc(m.method)}</div>
     <div style="text-align:right;"><div class="mono">৳${PL.fmt(m.volume)}</div><div style="color:var(--muted);font-size:11px;">${m.count} tx</div></div></div>`).join("")
     : '<div class="empty">এখনো কোনো ভেরিফাইড পেমেন্ট নেই।</div>';
 }
 
+// ================= USERS =================
+let userSearchDebounce;
+document.getElementById("userSearch").addEventListener("input", (e) => {
+  clearTimeout(userSearchDebounce);
+  userSearchDebounce = setTimeout(() => { usersState.q = e.target.value.trim(); usersState.page = 1; loadUsers(); }, 350);
+});
+
 async function loadUsers() {
-  const r = await PL.api("/admin/users");
+  const r = await PL.api(`/admin/users?q=${encodeURIComponent(usersState.q)}&page=${usersState.page}&limit=${usersState.limit}`);
   const body = document.getElementById("usersBody");
   const rows = (r.ok && r.data.users) || [];
-  if (!rows.length) { body.innerHTML = '<tr><td colspan="5" class="empty">No users.</td></tr>'; return; }
-  body.innerHTML = rows.map((u) => `
+  usersState.total = (r.ok && r.data.total) || 0;
+  if (!rows.length) { body.innerHTML = '<tr><td colspan="5" class="empty">No users found.</td></tr>'; renderPagination("usersPagination", usersState, (p) => { usersState.page = p; loadUsers(); }); return; }
+
+  body.innerHTML = rows.map((u) => {
+    const locked = u.lockout_until && u.lockout_until > Date.now();
+    return `
     <tr>
-      <td>${u.email}</td><td>${u.name || "—"}</td><td>${PL.fmtDate(u.created_at)}</td>
-      <td><span class="badge ${u.suspended ? "expired" : "verified"}">${u.suspended ? "SUSPENDED" : "ACTIVE"}</span></td>
-      <td><button class="btn btn-sm ${u.suspended ? "btn-good" : "btn-danger"}" data-id="${u.id}" data-suspend="${u.suspended ? 0 : 1}">${u.suspended ? "Unsuspend" : "Suspend"}</button></td>
-    </tr>`).join("");
-  body.querySelectorAll("button[data-id]").forEach((btn) => btn.addEventListener("click", async () => {
-    const r2 = await PL.api(`/admin/users/${btn.dataset.id}/toggle`, { method: "POST", body: { suspended: btn.dataset.suspend === "1" } });
-    if (r2.ok) { PL.toast("আপডেট হয়েছে।", "good"); loadUsers(); } else PL.toast(r2.data.error || "সমস্যা হয়েছে।", "bad");
-  }));
+      <td>${PL.esc(u.email)}</td><td>${PL.esc(u.name || "—")}</td><td>${PL.fmtDate(u.created_at)}</td>
+      <td>
+        <span class="badge ${u.suspended ? "expired" : "verified"}">${u.suspended ? "SUSPENDED" : "ACTIVE"}</span>
+        ${locked ? '<span class="badge pending" style="margin-left:4px;">LOCKED</span>' : ""}
+      </td>
+      <td><button class="linkbtn viewUserBtn" data-id="${u.id}">View / Manage →</button></td>
+    </tr>`;
+  }).join("");
+  body.querySelectorAll(".viewUserBtn").forEach((btn) => btn.addEventListener("click", () => openUserDetail(btn.dataset.id)));
+  renderPagination("usersPagination", usersState, (p) => { usersState.page = p; loadUsers(); });
 }
 
+async function openUserDetail(userId) {
+  const r = await PL.api(`/admin/users/${userId}`);
+  if (!r.ok) { PL.toast(r.data.error || "লোড করা যায়নি।", "bad"); return; }
+  const { user, brands, transactionCount, verifiedVolume } = r.data;
+  const box = document.getElementById("userModalBox");
+
+  box.innerHTML = `
+    <h3>${PL.esc(user.name || user.email.split("@")[0])}</h3>
+    <p style="font-size:12.5px;color:var(--muted);margin:-8px 0 16px;">${PL.esc(user.email)} · যোগ দিয়েছেন ${PL.fmtDate(user.created_at)}</p>
+
+    <div class="grid2" style="margin-bottom:16px;">
+      <div class="stat-box"><div class="l">Brands</div><div class="v">${brands.length}</div></div>
+      <div class="stat-box"><div class="l">Verified Volume</div><div class="v mono">৳${PL.fmt(verifiedVolume)}</div></div>
+    </div>
+
+    <div class="field"><label>Name</label><input type="text" id="editUserName" value="${PL.esc(user.name || "")}" /></div>
+    <div class="field"><label>Email</label><input type="email" id="editUserEmail" value="${PL.esc(user.email)}" /></div>
+    <button class="btn btn-dark btn-block" id="saveUserBtn" style="margin-bottom:10px;">তথ্য সেভ করুন</button>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px;">
+      <button class="btn btn-ghost btn-sm" id="toggleSuspendBtn">${user.suspended ? "Unsuspend" : "Suspend"}</button>
+      <button class="btn btn-ghost btn-sm" id="forceLogoutBtn">Force Logout</button>
+      <button class="btn btn-ghost btn-sm" id="resetPassBtn">Reset Password</button>
+      <button class="btn btn-danger btn-sm" id="deleteUserBtn">Delete Account</button>
+    </div>
+    <div id="userActionNote"></div>
+
+    <div class="sectiontitle" style="margin-top:18px;">Brands (${brands.length})</div>
+    <div class="miniList">
+      ${brands.length ? brands.map((b) => `<div class="miniRow"><div>${PL.esc(b.name)}</div><span class="badge ${b.enabled ? "verified" : "expired"}">${b.enabled ? "ACTIVE" : "DISABLED"}</span></div>`).join("") : '<div class="empty">কোনো Brand নেই।</div>'}
+    </div>
+
+    <button class="btn btn-ghost btn-block" style="margin-top:18px;" id="closeUserModalBtn">বন্ধ করুন</button>
+  `;
+
+  document.getElementById("closeUserModalBtn").addEventListener("click", () => closeModal("userModal"));
+
+  document.getElementById("saveUserBtn").addEventListener("click", async () => {
+    const res = await PL.api(`/admin/users/${userId}`, { method: "POST", body: {
+      name: document.getElementById("editUserName").value.trim(),
+      email: document.getElementById("editUserEmail").value.trim(),
+    }});
+    PL.toast(res.ok ? "আপডেট হয়েছে।" : (res.data.error || "সমস্যা হয়েছে।"), res.ok ? "good" : "bad");
+    if (res.ok) { loadUsers(); openUserDetail(userId); }
+  });
+
+  document.getElementById("toggleSuspendBtn").addEventListener("click", () => {
+    confirmAction({
+      title: user.suspended ? "Unsuspend করুন?" : "Suspend করুন?",
+      message: user.suspended ? "এই ইউজার আবার লগইন করতে পারবেন।" : "এই ইউজার আর লগইন করতে পারবেন না, যতক্ষণ না আবার unsuspend করা হয়।",
+      danger: !user.suspended,
+      confirmLabel: user.suspended ? "Unsuspend" : "Suspend",
+      onConfirm: async () => {
+        const res = await PL.api(`/admin/users/${userId}/toggle`, { method: "POST", body: { suspended: !user.suspended } });
+        PL.toast(res.ok ? "আপডেট হয়েছে।" : (res.data.error || "সমস্যা হয়েছে।"), res.ok ? "good" : "bad");
+        loadUsers(); closeModal("userModal");
+      },
+    });
+  });
+
+  document.getElementById("forceLogoutBtn").addEventListener("click", () => {
+    confirmAction({
+      title: "সব ডিভাইস থেকে Logout করাবেন?",
+      message: "এই ইউজারের বর্তমান সব session সাথে সাথে অকার্যকর হয়ে যাবে — আবার লগইন করতে হবে।",
+      confirmLabel: "Force Logout",
+      onConfirm: async () => {
+        const res = await PL.api(`/admin/users/${userId}/force-logout`, { method: "POST" });
+        PL.toast(res.ok ? "সব সেশন লগআউট করা হয়েছে।" : (res.data.error || "সমস্যা হয়েছে।"), res.ok ? "good" : "bad");
+      },
+    });
+  });
+
+  document.getElementById("resetPassBtn").addEventListener("click", () => {
+    confirmAction({
+      title: "পাসওয়ার্ড রিসেট করবেন?",
+      message: "একটা নতুন সাময়িক পাসওয়ার্ড তৈরি হবে এবং এই ইউজারের সব session logout হয়ে যাবে। নতুন পাসওয়ার্ডটা ইউজারকে নিরাপদে জানিয়ে দিন।",
+      confirmLabel: "Reset Password",
+      onConfirm: async () => {
+        const res = await PL.api(`/admin/users/${userId}/reset-password`, { method: "POST" });
+        if (!res.ok) { PL.toast(res.data.error || "সমস্যা হয়েছে।", "bad"); return; }
+        document.getElementById("userActionNote").innerHTML =
+          `<div class="infoBox">নতুন সাময়িক পাসওয়ার্ড: <b class="mono">${PL.esc(res.data.tempPassword)}</b><br>এটা এখনই কপি করে ইউজারকে নিরাপদে পাঠান — আবার দেখানো যাবে না।</div>`;
+      },
+    });
+  });
+
+  document.getElementById("deleteUserBtn").addEventListener("click", () => {
+    confirmAction({
+      title: "অ্যাকাউন্ট স্থায়ীভাবে ডিলিট করবেন?",
+      message: `<b>${PL.esc(user.email)}</b> এবং তার ${brands.length}টা Brand, সব Invoice, সব SMS log — সব স্থায়ীভাবে মুছে যাবে। এটা <b>ফেরানো যাবে না।</b>`,
+      danger: true,
+      confirmLabel: "হ্যাঁ, ডিলিট করুন",
+      onConfirm: async () => {
+        const res = await PL.api(`/admin/users/${userId}/delete`, { method: "POST" });
+        PL.toast(res.ok ? "অ্যাকাউন্ট ডিলিট হয়েছে।" : (res.data.error || "সমস্যা হয়েছে।"), res.ok ? "good" : "bad");
+        closeModal("userModal");
+        loadUsers(); loadStats();
+      },
+    });
+  });
+
+  openModal("userModal");
+}
+
+// ================= BRANDS =================
+let brandSearchDebounce;
+let brandSearchQ = "";
+document.getElementById("brandSearch").addEventListener("input", (e) => {
+  clearTimeout(brandSearchDebounce);
+  brandSearchDebounce = setTimeout(() => { brandSearchQ = e.target.value.trim(); loadBrands(); }, 350);
+});
+
 async function loadBrands() {
-  const r = await PL.api("/admin/brands");
+  const r = await PL.api(`/admin/brands?q=${encodeURIComponent(brandSearchQ)}`);
   const wrap = document.getElementById("brandsBody");
   const rows = (r.ok && r.data.brands) || [];
-  if (!rows.length) { wrap.innerHTML = '<div class="empty">No brands.</div>'; return; }
+  if (!rows.length) { wrap.innerHTML = '<div class="empty">No brands found.</div>'; return; }
   wrap.innerHTML = rows.map((b) => `
     <div class="card">
       <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;">
-        <div><b>${b.name}</b> <span style="color:var(--muted);font-size:12px;">· ${b.ownerEmail}</span><div style="font-size:11.5px;color:var(--muted);">${b.domain || "no domain"}</div></div>
-        <div style="display:flex;align-items:center;gap:10px;">
-          <button class="btn btn-ghost btn-sm regenBrandBtn" data-id="${b.id}">↻ Regenerate Key</button>
+        <div><b>${PL.esc(b.name)}</b> <span style="color:var(--muted);font-size:12px;">· ${PL.esc(b.ownerEmail)}</span><div style="font-size:11.5px;color:var(--muted);">${PL.esc(b.domain || "no domain")}</div></div>
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+          <button class="btn btn-ghost btn-sm regenBrandBtn" data-id="${b.id}">↻ Key</button>
+          <button class="btn btn-danger btn-sm deleteBrandBtn" data-id="${b.id}" data-name="${PL.esc(b.name)}">Delete</button>
           <label class="switch"><input type="checkbox" class="brandToggle" data-id="${b.id}" ${b.enabled ? "checked" : ""}><span class="slider"></span></label>
         </div>
       </div>
@@ -204,21 +422,65 @@ async function loadBrands() {
     const r2 = await PL.api(`/admin/brands/${el.dataset.brand}/methods/${el.dataset.method}/toggle`, { method: "POST", body: { enabled: el.checked } });
     PL.toast(r2.ok ? "আপডেট হয়েছে।" : (r2.data.error || "সমস্যা হয়েছে।"), r2.ok ? "good" : "bad");
   }));
-  wrap.querySelectorAll(".regenBrandBtn").forEach((btn) => btn.addEventListener("click", async () => {
-    if (!confirm("এই Brand-এর API key regenerate করবেন? পুরোনো key সাথে সাথে কাজ করা বন্ধ হয়ে যাবে।")) return;
-    const r2 = await PL.api(`/admin/brands/${btn.dataset.id}/regenerate-key`, { method: "POST" });
-    PL.toast(r2.ok ? "নতুন key তৈরি হয়েছে।" : (r2.data.error || "সমস্যা হয়েছে।"), r2.ok ? "good" : "bad");
+  wrap.querySelectorAll(".regenBrandBtn").forEach((btn) => btn.addEventListener("click", () => {
+    confirmAction({
+      title: "API Key regenerate করবেন?",
+      message: "পুরোনো key সাথে সাথে কাজ করা বন্ধ হয়ে যাবে — merchant-এর নিজের integration/app আপডেট করতে হবে।",
+      confirmLabel: "Regenerate",
+      onConfirm: async () => {
+        const r2 = await PL.api(`/admin/brands/${btn.dataset.id}/regenerate-key`, { method: "POST" });
+        PL.toast(r2.ok ? "নতুন key তৈরি হয়েছে।" : (r2.data.error || "সমস্যা হয়েছে।"), r2.ok ? "good" : "bad");
+      },
+    });
+  }));
+  wrap.querySelectorAll(".deleteBrandBtn").forEach((btn) => btn.addEventListener("click", () => {
+    confirmAction({
+      title: "Brand ডিলিট করবেন?",
+      message: `<b>${btn.dataset.name}</b> এবং এর সব Invoice/SMS log স্থায়ীভাবে মুছে যাবে। এটা <b>ফেরানো যাবে না।</b>`,
+      danger: true,
+      confirmLabel: "হ্যাঁ, ডিলিট করুন",
+      onConfirm: async () => {
+        const r2 = await PL.api(`/admin/brands/${btn.dataset.id}/delete`, { method: "POST" });
+        PL.toast(r2.ok ? "Brand ডিলিট হয়েছে।" : (r2.data.error || "সমস্যা হয়েছে।"), r2.ok ? "good" : "bad");
+        loadBrands(); loadStats();
+      },
+    });
   }));
 }
 
+// ================= TRANSACTIONS =================
+let txSearchDebounce;
+document.getElementById("txSearch").addEventListener("input", (e) => {
+  clearTimeout(txSearchDebounce);
+  txSearchDebounce = setTimeout(() => { txState.q = e.target.value.trim(); txState.page = 1; loadTx(); }, 350);
+});
+document.getElementById("txStatusFilter").addEventListener("change", (e) => { txState.status = e.target.value; txState.page = 1; loadTx(); });
+
 async function loadTx() {
-  const r = await PL.api("/admin/transactions?limit=200");
+  const params = new URLSearchParams({ q: txState.q, status: txState.status, page: txState.page, limit: txState.limit });
+  const r = await PL.api(`/admin/transactions?${params}`);
   const body = document.getElementById("adminTxBody");
   lastTxRows = (r.ok && r.data.transactions) || [];
-  if (!lastTxRows.length) { body.innerHTML = '<tr><td colspan="6" class="empty">No records found.</td></tr>'; return; }
+  txState.total = (r.ok && r.data.total) || 0;
+  if (!lastTxRows.length) { body.innerHTML = '<tr><td colspan="7" class="empty">No records found.</td></tr>'; renderPagination("txPagination", txState, (p) => { txState.page = p; loadTx(); }); return; }
   body.innerHTML = lastTxRows.map((t) => `
-    <tr><td class="mono">${t.id}</td><td>${t.brand_name}</td><td>${t.owner_email}</td><td>${t.method || "—"}</td>
-    <td class="mono">৳${PL.fmt(t.amount)}</td><td><span class="badge ${t.status}">${t.status.toUpperCase()}</span></td></tr>`).join("");
+    <tr><td class="mono">${PL.esc(t.id)}</td><td>${PL.esc(t.brand_name)}</td><td>${PL.esc(t.owner_email)}</td><td>${PL.esc(t.method || "—")}</td>
+    <td class="mono">৳${PL.fmt(t.amount)}</td><td><span class="badge ${t.status}">${t.status.toUpperCase()}</span></td>
+    <td><button class="linkbtn deleteTxBtn" data-id="${t.id}" style="color:var(--bad);">Delete</button></td></tr>`).join("");
+  body.querySelectorAll(".deleteTxBtn").forEach((btn) => btn.addEventListener("click", () => {
+    confirmAction({
+      title: "Transaction ডিলিট করবেন?",
+      message: "এই invoice-টা স্থায়ীভাবে মুছে যাবে। এটা ফেরানো যাবে না।",
+      danger: true,
+      confirmLabel: "হ্যাঁ, ডিলিট করুন",
+      onConfirm: async () => {
+        const r2 = await PL.api(`/admin/transactions/${btn.dataset.id}/delete`, { method: "POST" });
+        PL.toast(r2.ok ? "ডিলিট হয়েছে।" : (r2.data.error || "সমস্যা হয়েছে।"), r2.ok ? "good" : "bad");
+        loadTx(); loadStats();
+      },
+    });
+  }));
+  renderPagination("txPagination", txState, (p) => { txState.page = p; loadTx(); });
 }
 
 document.getElementById("exportCsvBtn").addEventListener("click", () => {
@@ -235,6 +497,24 @@ document.getElementById("exportCsvBtn").addEventListener("click", () => {
   URL.revokeObjectURL(url);
 });
 
+// ================= AUDIT LOG =================
+async function loadAuditLog() {
+  const r = await PL.api("/admin/audit-log?limit=150");
+  const body = document.getElementById("auditBody");
+  const rows = (r.ok && r.data.logs) || [];
+  if (!rows.length) { body.innerHTML = '<tr><td colspan="6" class="empty">এখনো কোনো admin action রেকর্ড হয়নি।</td></tr>'; return; }
+  body.innerHTML = rows.map((l) => `
+    <tr>
+      <td style="font-size:11.5px;">${PL.fmtDate(l.created_at)}</td>
+      <td>${PL.esc(l.admin_email)}</td>
+      <td><span class="badge pending">${PL.esc(l.action)}</span></td>
+      <td class="mono" style="font-size:11px;">${PL.esc(l.target_type || "")}${l.target_id ? " · " + PL.esc(l.target_id.slice(0, 10)) + "…" : ""}</td>
+      <td style="font-size:12px;">${PL.esc(l.detail || "—")}</td>
+      <td style="font-size:11px;color:var(--muted);">${PL.esc(l.ip || "—")}</td>
+    </tr>`).join("");
+}
+
+// ================= SITE CONFIG =================
 async function loadConfig() {
   const r = await PL.api("/config/public");
   if (!r.ok) return;
@@ -261,7 +541,7 @@ document.getElementById("saveConfigBtn").addEventListener("click", async () => {
 (async function () {
   const user = await PL.requireAdmin("admin");
   if (!user) return;
-  loadStats(); loadAnalytics(); loadUsers(); loadBrands(); loadTx(); loadConfig();
+  loadStats(); loadAnalytics(); loadUsers(); loadBrands(); loadTx(); loadAuditLog(); loadConfig();
 })();
 </script>
 </body>
