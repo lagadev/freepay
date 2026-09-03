@@ -258,11 +258,24 @@ async function getBrandByApiKey(request, env) {
   return await env.DB.prepare(`SELECT * FROM brands WHERE api_key = ?`).bind(m[1].trim()).first();
 }
 
-// Used by the FreePay Sync mobile app to validate a Brand API key on login
+// The SMS/App key is deliberately a SEPARATE credential from the invoice API
+// key. It can push SMS and read basic brand info (for the app's login
+// screen) but CANNOT create invoices — so if a phone running the FreePay
+// Sync app is ever compromised, the attacker still can't mint invoices
+// against the merchant's account.
+async function getBrandByIngestKey(request, env) {
+  const auth = request.headers.get("Authorization") || "";
+  const m = auth.match(/^Bearer\s+(.+)$/i);
+  if (!m) return null;
+  return await env.DB.prepare(`SELECT * FROM brands WHERE ingest_key = ?`).bind(m[1].trim()).first();
+}
+
+// Used by the FreePay Sync mobile app to validate its SMS/App key on login
 // and show which brand it's connected to, without exposing anything the
-// app doesn't need.
+// app doesn't need. Deliberately authenticates via the ingest key, not the
+// invoice API key — the app never needs (or gets) invoice-creation access.
 async function brandMe(request, env) {
-  const brand = await getBrandByApiKey(request, env);
+  const brand = await getBrandByIngestKey(request, env);
   if (!brand) return json({ error: "API key ভুল বা নেই।" }, 401);
   return json(
     {
@@ -289,6 +302,7 @@ function brandPublic(b) {
     logoUrl: b.logo_url,
     domain: b.domain,
     apiKey: b.api_key,
+    ingestKey: b.ingest_key,
     enabled: !!b.enabled,
     createdAt: b.created_at,
     numbers: {
@@ -425,10 +439,11 @@ async function createBrand(request, env) {
 
   const id = crypto.randomUUID();
   const now = Date.now();
-  const apiKey = genId("BR", 32);
+  const apiKey = genId("PAY_", 32);
+  const ingestKey = genId("APP_", 32);
   await env.DB.prepare(
-    `INSERT INTO brands (id, user_id, name, domain, api_key, enabled, created_at) VALUES (?, ?, ?, ?, ?, 1, ?)`
-  ).bind(id, user.id, name, domain, apiKey, now).run();
+    `INSERT INTO brands (id, user_id, name, domain, api_key, ingest_key, enabled, created_at) VALUES (?, ?, ?, ?, ?, ?, 1, ?)`
+  ).bind(id, user.id, name, domain, apiKey, ingestKey, now).run();
 
   const brand = await env.DB.prepare(`SELECT * FROM brands WHERE id = ?`).bind(id).first();
   return json({ brand: brandPublic(brand) }, 201);
@@ -482,15 +497,31 @@ async function updateBrandMethods(brandId, request, env) {
   return json({ brand: brandPublic(updated) }, 200);
 }
 
+// Regenerates the INVOICE API key — used by the merchant's own server to
+// create invoices. Regenerating this never touches the SMS/App key, so the
+// FreePay Sync app stays connected.
 async function regenerateBrandKey(brandId, request, env) {
   const user = await getSessionUser(request, env);
   if (!user) return json({ error: "Not logged in." }, 401);
   const brand = await ownBrandOr404(brandId, user, env);
   if (!brand) return json({ error: "Brand পাওয়া যায়নি।" }, 404);
   if (brand === "forbidden") return json({ error: "Forbidden." }, 403);
-  const newKey = genId("BR", 32);
+  const newKey = genId("PAY_", 32);
   await env.DB.prepare(`UPDATE brands SET api_key = ? WHERE id = ?`).bind(newKey, brandId).run();
   return json({ apiKey: newKey }, 200);
+}
+
+// Regenerates the SMS/App key — used only by the FreePay Sync app. Doing
+// this logs the app out everywhere until it's reconfigured with the new key.
+async function regenerateIngestKey(brandId, request, env) {
+  const user = await getSessionUser(request, env);
+  if (!user) return json({ error: "Not logged in." }, 401);
+  const brand = await ownBrandOr404(brandId, user, env);
+  if (!brand) return json({ error: "Brand পাওয়া যায়নি।" }, 404);
+  if (brand === "forbidden") return json({ error: "Forbidden." }, 403);
+  const newKey = genId("APP_", 32);
+  await env.DB.prepare(`UPDATE brands SET ingest_key = ? WHERE id = ?`).bind(newKey, brandId).run();
+  return json({ ingestKey: newKey }, 200);
 }
 
 async function myStats(request, env) {
@@ -665,7 +696,7 @@ async function verifyInvoice(id, request, env, ctx) {
 }
 
 async function ingestSms(request, env, ctx) {
-  const brand = await getBrandByApiKey(request, env);
+  const brand = await getBrandByIngestKey(request, env);
   if (!brand) return json({ error: "Unauthorized." }, 401);
 
   const body = await readJson(request);
@@ -941,10 +972,21 @@ async function adminRegenerateBrandKey(brandId, request, env) {
   if (!admin) return json({ error: "Forbidden." }, 403);
   const brand = await env.DB.prepare(`SELECT id FROM brands WHERE id = ?`).bind(brandId).first();
   if (!brand) return json({ error: "Brand পাওয়া যায়নি।" }, 404);
-  const newKey = genId("BR", 32);
+  const newKey = genId("PAY_", 32);
   await env.DB.prepare(`UPDATE brands SET api_key = ? WHERE id = ?`).bind(newKey, brandId).run();
-  await logAudit(env, admin.email, "brand.regenerate_key", "brand", brandId, null, request);
+  await logAudit(env, admin.email, "brand.regenerate_key", "brand", brandId, "invoice API key", request);
   return json({ apiKey: newKey }, 200);
+}
+
+async function adminRegenerateIngestKey(brandId, request, env) {
+  const admin = await requireAdmin(request, env);
+  if (!admin) return json({ error: "Forbidden." }, 403);
+  const brand = await env.DB.prepare(`SELECT id FROM brands WHERE id = ?`).bind(brandId).first();
+  if (!brand) return json({ error: "Brand পাওয়া যায়নি।" }, 404);
+  const newKey = genId("APP_", 32);
+  await env.DB.prepare(`UPDATE brands SET ingest_key = ? WHERE id = ?`).bind(newKey, brandId).run();
+  await logAudit(env, admin.email, "brand.regenerate_key", "brand", brandId, "SMS/App key", request);
+  return json({ ingestKey: newKey }, 200);
 }
 
 // ---- admin: transactions ----------------------------------------------
@@ -1090,6 +1132,7 @@ export async function handleApi(request, env, ctx, url) {
   if ((m = pathname.match(/^\/api\/brands\/([a-zA-Z0-9-]+)$/)) && method === "POST") return await updateBrandProfile(m[1], request, env);
   if ((m = pathname.match(/^\/api\/brands\/([a-zA-Z0-9-]+)\/methods$/)) && method === "POST") return await updateBrandMethods(m[1], request, env);
   if ((m = pathname.match(/^\/api\/brands\/([a-zA-Z0-9-]+)\/regenerate-key$/)) && method === "POST") return await regenerateBrandKey(m[1], request, env);
+  if ((m = pathname.match(/^\/api\/brands\/([a-zA-Z0-9-]+)\/regenerate-ingest-key$/)) && method === "POST") return await regenerateIngestKey(m[1], request, env);
 
   // my stats / transactions
   if (pathname === "/api/me/stats" && method === "GET") return await myStats(request, env);
@@ -1126,6 +1169,8 @@ export async function handleApi(request, env, ctx, url) {
     return await adminToggleBrandMethod(m[1], m[2], request, env);
   if ((m = pathname.match(/^\/api\/admin\/brands\/([a-zA-Z0-9-]+)\/regenerate-key$/)) && method === "POST")
     return await adminRegenerateBrandKey(m[1], request, env);
+  if ((m = pathname.match(/^\/api\/admin\/brands\/([a-zA-Z0-9-]+)\/regenerate-ingest-key$/)) && method === "POST")
+    return await adminRegenerateIngestKey(m[1], request, env);
   if ((m = pathname.match(/^\/api\/admin\/brands\/([a-zA-Z0-9-]+)\/delete$/)) && method === "POST") return await adminDeleteBrand(m[1], request, env);
 
   // admin — transactions
