@@ -24,7 +24,8 @@ CREATE TABLE IF NOT EXISTS brands (
   name            TEXT NOT NULL,
   logo_url        TEXT,
   domain          TEXT,                        -- informational, locked after creation
-  api_key         TEXT UNIQUE NOT NULL,
+  api_key         TEXT UNIQUE NOT NULL,   -- used by the merchant's OWN server to create invoices
+  ingest_key      TEXT UNIQUE,            -- used ONLY by the FreePay Sync app (login + SMS push) — cannot create invoices
   enabled         INTEGER NOT NULL DEFAULT 1,   -- admin kill-switch for the whole brand
   bkash_number    TEXT,
   nagad_number    TEXT,
@@ -41,6 +42,7 @@ CREATE TABLE IF NOT EXISTS brands (
 );
 CREATE INDEX IF NOT EXISTS idx_brands_user ON brands(user_id);
 CREATE INDEX IF NOT EXISTS idx_brands_api_key ON brands(api_key);
+CREATE INDEX IF NOT EXISTS idx_brands_ingest_key ON brands(ingest_key);
 
 CREATE TABLE IF NOT EXISTS invoices (
   id              TEXT PRIMARY KEY,             -- INV-XXXXXXXX
