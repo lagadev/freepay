@@ -41,7 +41,7 @@
       <label>1. Select Target Brand</label>
       <select id="brandSelect"></select>
     </div>
-    <label style="font-size:12.5px;font-weight:700;color:var(--muted);">Your Brand API Key</label>
+    <label style="font-size:12.5px;font-weight:700;color:var(--muted);">SMS / App Key (এটাই অ্যাপ-এ ব্যবহার করবেন — Invoice Key নয়)</label>
     <div class="keyval" id="keyVal">—</div>
     <button class="btn btn-ghost btn-sm" id="copyBtn">📋 Copy</button>
   </div>
@@ -50,8 +50,8 @@
     <h3 style="margin:0 0 4px;font-size:14.5px;">4-Step Quick Setup</h3>
     <div class="stepitem"><div class="stepnum">1</div><div><b>Install APK</b><div style="font-size:12.5px;color:var(--muted);">উপরের বাটন থেকে ডাউনলোড করে ইনস্টল করুন।</div></div></div>
     <div class="stepitem"><div class="stepnum">2</div><div><b>Allow Permissions</b><div style="font-size:12.5px;color:var(--muted);">SMS, Notification এবং Battery Optimization permission দিন।</div></div></div>
-    <div class="stepitem"><div class="stepnum">3</div><div><b>Login App</b><div style="font-size:12.5px;color:var(--muted);">উপরের Brand API Key দিয়ে অ্যাপে লগইন করুন।</div></div></div>
-    <div class="stepitem"><div class="stepnum">4</div><div><b>Keep Online</b><div style="font-size:12.5px;color:var(--muted);">২৪/৭ ইন্টারনেট কানেকশন রাখুন এবং অ্যাপটা ব্যাকগ্রাউন্ডে চালু রাখুন।</div></div></div>
+    <div class="stepitem"><div class="stepnum">3</div><div><b>Login App</b><div style="font-size:12.5px;color:var(--muted);">উপরের SMS/App Key দিয়ে অ্যাপে লগইন করুন — এই key দিয়ে ইনভয়েস তৈরি করা যায় না, শুধু SMS পাঠানো যায়, তাই এটা ফোনে রাখা নিরাপদ।</div></div></div>
+    <div class="stepitem"><div class="stepnum">4</div><div><b>Keep Online</b><div style="font-size:12.5px;color:var(--muted);">২৪/৭ ইন্টারনেট কানেকশন রাখুন এবং অ্যাপটা ব্যাকগ্রাউন্ডে চালু রাখুন — অ্যাপের ভেতরে একটা লাইভ status indicator থাকবে যাতে বোঝা যায় এটা চলছে কিনা।</div></div></div>
   </div>
 </div>
 <script src="/assets/app.js"></script>
@@ -70,8 +70,8 @@
     select.innerHTML = '<option>প্রথমে একটা Brand তৈরি করুন</option>';
     return;
   }
-  select.innerHTML = brands.map((b) => `<option value="${PL.esc(b.apiKey)}">${PL.esc(b.name)}</option>`).join("");
-  const updateKey = () => (document.getElementById("keyVal").textContent = select.value);
+  select.innerHTML = brands.map((b) => `<option value="${PL.esc(b.ingestKey || "")}">${PL.esc(b.name)}</option>`).join("");
+  const updateKey = () => (document.getElementById("keyVal").textContent = select.value || "—");
   select.addEventListener("change", updateKey);
   updateKey();
 
