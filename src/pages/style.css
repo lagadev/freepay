@@ -196,24 +196,41 @@ table.tx tbody tr:hover{background:var(--bg-soft);}
 .dangerBox{background:var(--bad-bg);border-radius:12px;padding:12px 14px;font-size:12.5px;color:var(--bad);line-height:1.6;margin-bottom:14px;}
 .infoBox{background:var(--accent-soft);border-radius:12px;padding:12px 14px;font-size:12.5px;color:var(--violet-deep);line-height:1.6;margin-bottom:14px;word-break:break-all;}
 
-/* ---- pay page ---- */
-body.pay-body{display:flex;align-items:flex-start;justify-content:center;padding:28px 16px 60px;}
-.shell{width:100%;max-width:430px;}
+/* ---- pay page (matches provided reference design) ---- */
+body.pay-body{background:var(--bg-soft);min-height:100vh;padding:16px 16px 110px;}
+.shell{width:100%;max-width:460px;margin:0 auto;}
 .hidden{display:none !important;}
 .center-panel{text-align:center;padding:26px 8px 8px;}
 .center-panel .icon{width:64px;height:64px;border-radius:50%;margin:0 auto 16px;display:flex;align-items:center;justify-content:center;font-size:26px;}
 .center-panel.good .icon{background:var(--good-bg);color:var(--good);}
 .center-panel.bad .icon{background:var(--bad-bg);color:var(--bad);}
-.brandhead{text-align:center;margin-bottom:16px;}
-.brandhead img{width:52px;height:52px;border-radius:14px;object-fit:cover;margin-bottom:8px;}
-.brandhead .bname{font-weight:800;font-size:15px;}
-.select-title{text-align:center;margin-bottom:4px;}
-.select-title h2{font-size:17px;margin:0 0 6px;}
-.select-title .amt{color:var(--violet-deep);font-weight:800;}
-.method-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:20px;}
-.method-card{border:2px solid var(--line);border-radius:16px;padding:16px 8px;background:#fff;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:8px;}
-.method-card img{width:44px;height:44px;border-radius:12px;}
-.method-card .name{font-weight:700;font-size:13.5px;}
+
+.paytopbar{max-width:460px;margin:0 auto 18px;display:flex;justify-content:space-between;align-items:center;background:var(--card);border-radius:18px;padding:8px;box-shadow:var(--shadow-sm);}
+.paytopbtn{width:40px;height:40px;border-radius:13px;border:none;background:transparent;display:flex;align-items:center;justify-content:center;color:var(--text);cursor:pointer;}
+.paytopbtn:hover{background:var(--bg-soft);}
+
+.payBrandHead{text-align:center;margin-bottom:22px;}
+.payAvatar{width:92px;height:92px;border-radius:50%;background:var(--card);box-shadow:var(--shadow);display:flex;align-items:center;justify-content:center;margin:0 auto 12px;overflow:hidden;}
+.payAvatar img{width:100%;height:100%;object-fit:cover;}
+.payAvatarFallback{width:100%;height:100%;display:flex;align-items:center;justify-content:center;background:var(--grad);color:#fff;font-weight:800;font-size:32px;}
+.payBrandName-lg{font-size:24px;font-weight:800;color:var(--text);font-family:var(--ff-display);}
+
+.payBrandHead-sm{display:flex;align-items:center;gap:14px;text-align:left;background:var(--card);border-radius:18px;padding:14px 16px;box-shadow:var(--shadow-sm);}
+.payAvatar-sm{width:54px;height:54px;border-radius:14px;box-shadow:none;margin:0;flex:none;}
+.payBrandMeta{flex:1;min-width:0;}
+.payBrandName{font-weight:800;font-size:15.5px;color:var(--text);}
+.payInvoiceId{font-size:11.5px;color:var(--muted);margin-top:2px;}
+
+.paySectionLabel{background:var(--ink);color:#fff;text-align:center;font-weight:700;font-size:14px;border-radius:14px;padding:13px;margin-bottom:16px;}
+
+.method-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;}
+.method-card{position:relative;overflow:hidden;border:1.5px solid var(--line);border-radius:16px;padding:26px 14px;background:#fff;cursor:pointer;display:flex;align-items:center;justify-content:center;min-height:88px;transition:.15s var(--ease);}
+.method-card:hover{border-color:var(--violet);box-shadow:var(--shadow-sm);}
+.method-card img{max-width:100%;max-height:46px;object-fit:contain;}
+.method-card .ribbon{position:absolute;top:11px;right:-30px;background:#dbe8fb;color:#1a3a63;font-size:8.5px;font-weight:800;letter-spacing:.03em;padding:3px 32px;transform:rotate(40deg);}
+
+.paylogoCard{background:var(--card);border-radius:18px;padding:30px 16px;display:flex;align-items:center;justify-content:center;margin:16px 0;box-shadow:var(--shadow-sm);}
+.paylogoCard img{max-height:56px;max-width:70%;object-fit:contain;}
 .pay-card{border-radius:22px;padding:22px 20px 18px;color:#fff;}
 .pay-card h2{text-align:center;font-size:16px;margin:0 0 16px;color:#fff;}
 input.trxinput{width:100%;border:none;border-radius:13px;padding:14px 15px;font-size:15px;font-family:'JetBrains Mono',monospace;margin-bottom:6px;outline:none;color:var(--text);background:#fff;text-align:center;}
@@ -222,10 +239,11 @@ ul.instr li{padding:12px 2px;display:flex;gap:10px;align-items:flex-start;font-s
 ul.instr li .dot2{flex:none;margin-top:6px;width:6px;height:6px;border-radius:50%;background:#fff;}
 ul.instr .hl{color:var(--gold);font-weight:700;}
 button.copytag{display:inline-flex;align-items:center;gap:5px;background:rgba(0,0,0,.28);color:#fff;border:none;padding:5px 10px;border-radius:8px;font-size:10.5px;font-weight:700;margin-left:6px;cursor:pointer;}
-button.submit{width:100%;border:none;border-radius:15px;padding:15px;background:var(--ink);color:#fff;font-size:15px;font-weight:700;cursor:pointer;margin-top:14px;}
-.timer-pill{display:flex;align-items:center;gap:7px;background:var(--chip);border-radius:999px;padding:7px 13px;font-size:11.5px;color:var(--muted);}
-.topline{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;}
-.changelink{background:none;border:none;color:var(--muted);font-size:11.5px;font-weight:600;cursor:pointer;text-decoration:underline;}
+
+.payBottomBar{position:fixed;left:0;right:0;bottom:0;background:var(--card);box-shadow:0 -8px 24px -12px rgba(20,21,43,.18);padding:16px 20px calc(16px + env(safe-area-inset-bottom));display:flex;align-items:center;justify-content:center;font-size:19px;font-weight:800;color:var(--violet-deep);z-index:90;}
+.payBottomBar-verify{justify-content:space-between;gap:14px;max-width:460px;margin:0 auto;left:0;right:0;border-radius:22px 22px 0 0;}
+button.submit{border:none;border-radius:15px;padding:14px 26px;background:var(--ink);color:#fff;font-size:15px;font-weight:700;cursor:pointer;flex:none;}
+.timer-pill{display:flex;align-items:center;gap:7px;background:var(--chip);border-radius:999px;padding:8px 14px;font-size:12px;color:var(--muted);}
 
 /* ---- verify loading ring ---- */
 .verify-overlay{position:fixed;inset:0;background:rgba(20,21,43,.6);display:flex;align-items:center;justify-content:center;z-index:200;}
