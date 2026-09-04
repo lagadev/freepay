@@ -103,11 +103,22 @@ function renderDetail(brand) {
     </div>
 
     <div class="card">
-      <h3 style="margin:0 0 14px;font-size:14.5px;">API Key</h3>
+      <h3 style="margin:0 0 4px;font-size:14.5px;">🧾 Invoice API Key</h3>
+      <p style="font-size:11.5px;color:var(--muted);margin:0 0 10px;">আপনার নিজের সার্ভার থেকে ইনভয়েস তৈরি করতে এই key ব্যবহার করুন। এটা কারো সাথে শেয়ার করবেন না।</p>
       <div class="keyval">${PL.esc(brand.apiKey)}</div>
       <div class="rowbtns" style="display:flex;gap:10px;">
         <button class="btn btn-ghost btn-sm" id="copyKeyBtn">${PL.ICONS.copy} Copy</button>
         <button class="btn btn-danger btn-sm" id="regenKeyBtn">↻ Regenerate</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3 style="margin:0 0 4px;font-size:14.5px;">📲 SMS / App Key</h3>
+      <p style="font-size:11.5px;color:var(--muted);margin:0 0 10px;">শুধুমাত্র FreePay Sync অ্যাপ-এ লগইন করতে ও SMS পাঠাতে ব্যবহার হয় — এই key দিয়ে ইনভয়েস তৈরি করা যায় না, তাই এটা ফোনে রাখা তুলনামূলক নিরাপদ।</p>
+      <div class="keyval">${PL.esc(brand.ingestKey || "—")}</div>
+      <div class="rowbtns" style="display:flex;gap:10px;">
+        <button class="btn btn-ghost btn-sm" id="copyIngestKeyBtn">${PL.ICONS.copy} Copy</button>
+        <button class="btn btn-danger btn-sm" id="regenIngestKeyBtn">↻ Regenerate</button>
       </div>
     </div>`;
 
@@ -147,10 +158,20 @@ function renderDetail(brand) {
 
   document.getElementById("copyKeyBtn").addEventListener("click", (e) => PL.copyText(brand.apiKey, e.currentTarget));
   document.getElementById("regenKeyBtn").addEventListener("click", async () => {
-    if (!confirm("Regenerate করলে পুরোনো API key কাজ করবে না। নিশ্চিত?")) return;
+    if (!confirm("Regenerate করলে পুরোনো Invoice API key কাজ করবে না। নিশ্চিত?")) return;
     const r = await PL.api(`/brands/${brand.id}/regenerate-key`, { method: "POST" });
     if (!r.ok) { PL.toast(r.data.error || "সমস্যা হয়েছে।", "bad"); return; }
-    PL.toast("নতুন API key তৈরি হয়েছে।", "good");
+    PL.toast("নতুন Invoice API key তৈরি হয়েছে।", "good");
+    await loadBrands();
+    selectBrand(brand.id);
+  });
+
+  document.getElementById("copyIngestKeyBtn").addEventListener("click", (e) => PL.copyText(brand.ingestKey || "", e.currentTarget));
+  document.getElementById("regenIngestKeyBtn").addEventListener("click", async () => {
+    if (!confirm("Regenerate করলে FreePay Sync অ্যাপ আবার নতুন key দিয়ে লগইন করাতে হবে। নিশ্চিত?")) return;
+    const r = await PL.api(`/brands/${brand.id}/regenerate-ingest-key`, { method: "POST" });
+    if (!r.ok) { PL.toast(r.data.error || "সমস্যা হয়েছে।", "bad"); return; }
+    PL.toast("নতুন SMS/App key তৈরি হয়েছে।", "good");
     await loadBrands();
     selectBrand(brand.id);
   });
