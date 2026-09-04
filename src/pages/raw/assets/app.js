@@ -86,9 +86,6 @@ window.PL = (function () {
 
   function renderNav(active, user) {
     const initial = ((user && (user.name || user.email)) || "U").trim().charAt(0).toUpperCase();
-    const activeItem = NAV_ITEMS.find((n) => n.id === active);
-    const currentLabel = active === "admin" ? "Admin" : activeItem ? activeItem.label : "Menu";
-
     const links = NAV_ITEMS.map(
       (n) => `<a href="${n.href}" class="${n.id === active ? "active" : ""}">${ICONS[n.icon]}<span>${n.label}</span></a>`
     ).join("");
@@ -97,19 +94,23 @@ window.PL = (function () {
       : "";
 
     return `
-      <div class="navbar"><div class="navbar-inner">
+      <div class="sidebarOverlay" id="plSidebarOverlay"></div>
+      <div class="sidebar-topbar" id="plTopbar">
+        <button class="sidebarToggleBtn" id="plSidebarToggle" aria-label="Menu">${ICONS.menu}</button>
         <a href="/app/dashboard.html" class="brand-logo"><img src="/assets/logos/freepay.svg" alt="FreePay">FreePay</a>
-        <div class="navMenuWrap">
-          <button class="navMenuBtn" id="plMenuBtn" aria-haspopup="true" aria-expanded="false">
-            ${ICONS.menu}<span>${esc(currentLabel)}</span>${ICONS.chevron}
-          </button>
-          <div class="navMenuPanel" id="plMenuPanel">${links}${adminLink}</div>
-        </div>
-        <div class="navuser">
+      </div>
+      <aside class="sidebar" id="plSidebar">
+        <a href="/app/dashboard.html" class="brand-logo sidebar-brand"><img src="/assets/logos/freepay.svg" alt="FreePay">FreePay</a>
+        <nav class="sidebar-nav">${links}${adminLink}</nav>
+        <div class="sidebar-user">
           <div class="navavatar" title="${esc(user ? user.email : "")}">${esc(initial)}</div>
+          <div class="sidebar-user-info">
+            <div class="name">${esc((user && (user.name || user.email.split("@")[0])) || "")}</div>
+            <div class="email">${esc(user ? user.email : "")}</div>
+          </div>
           <button class="iconbtn" id="plLogoutBtn" title="Logout">${ICONS.logout}</button>
         </div>
-      </div></div>`;
+      </aside>`;
   }
 
   function mountNav(active, user) {
@@ -122,25 +123,18 @@ window.PL = (function () {
       location.href = "/app/login.html";
     });
 
-    const menuBtn = document.getElementById("plMenuBtn");
-    const menuPanel = document.getElementById("plMenuPanel");
-    if (menuBtn && menuPanel) {
-      const closeMenu = () => {
-        menuPanel.classList.remove("open");
-        menuBtn.classList.remove("open");
-        menuBtn.setAttribute("aria-expanded", "false");
-      };
-      menuBtn.addEventListener("click", (e) => {
-        e.stopPropagation();
-        const open = menuPanel.classList.toggle("open");
-        menuBtn.classList.toggle("open", open);
-        menuBtn.setAttribute("aria-expanded", String(open));
+    const sidebar = document.getElementById("plSidebar");
+    const toggleBtn = document.getElementById("plSidebarToggle");
+    const overlay = document.getElementById("plSidebarOverlay");
+    if (sidebar && toggleBtn && overlay) {
+      const closeSidebar = () => { sidebar.classList.remove("open"); overlay.classList.remove("open"); };
+      toggleBtn.addEventListener("click", () => {
+        sidebar.classList.toggle("open");
+        overlay.classList.toggle("open");
       });
-      document.addEventListener("click", (e) => {
-        if (!menuPanel.contains(e.target) && e.target !== menuBtn) closeMenu();
-      });
-      document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeMenu(); });
-      menuPanel.querySelectorAll("a").forEach((a) => a.addEventListener("click", closeMenu));
+      overlay.addEventListener("click", closeSidebar);
+      document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeSidebar(); });
+      sidebar.querySelectorAll("a").forEach((a) => a.addEventListener("click", closeSidebar));
     }
   }
 
