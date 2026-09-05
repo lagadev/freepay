@@ -15,54 +15,245 @@ section.doc h2 .tag{font-size:10px;padding:3px 9px;border-radius:999px;font-weig
 .tag.get{background:#E3F2FD;color:#1565C0;}
 .tag.post{background:var(--good-bg);color:var(--good);}
 .tag.auth{background:var(--bad-bg);color:var(--bad);}
+
+.platformPills{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:20px;}
+.platformPill{background:var(--card);border:1.5px solid var(--line);border-radius:999px;padding:10px 18px;font-size:13px;font-weight:700;cursor:pointer;color:var(--muted);transition:.15s var(--ease);}
+.platformPill:hover{border-color:var(--violet);color:var(--violet-deep);}
+.platformPill.active{background:var(--grad);color:#fff;border-color:transparent;box-shadow:0 8px 18px -8px var(--violet);}
+.platformPanel{display:none;}
+.platformPanel.active{display:block;}
+
+.codeSection{margin-bottom:16px;}
+.codeSectionTitle{display:flex;align-items:center;gap:10px;font-weight:800;font-size:13px;letter-spacing:.02em;margin-bottom:10px;color:var(--text);}
+.codeSectionTitle .num{background:var(--ink);color:#fff;font-family:var(--ff-display);font-size:11px;font-weight:800;padding:3px 9px;border-radius:7px;}
+.installNote{font-size:11.5px;color:var(--muted);margin:-4px 0 8px;font-family:'JetBrains Mono',monospace;}
+
+.helpCard{background:var(--grad-soft);border:1px solid var(--accent-soft);border-radius:var(--radius-lg);padding:30px 26px;text-align:center;margin-top:40px;}
+.helpCard .icon{font-size:32px;margin-bottom:10px;}
+.helpCard h3{font-size:19px;margin:0 0 10px;}
+.helpCard p{font-size:13px;color:var(--muted);max-width:440px;margin:0 auto 20px;line-height:1.7;}
 </style>
 </head>
 <body>
 <div id="navSlot"></div>
 <div class="page">
   <h1 class="pagetitle">Developer Documentation</h1>
-  <p class="pagesub">প্রতিটা Brand-এর নিজস্ব API key দিয়ে ইনভয়েস তৈরি করুন — টাকা সরাসরি সেই Brand-এর নিজের নাম্বারে যায়।</p>
+  <p class="pagesub">প্রতিটা Brand-এর নিজস্ব <b>Invoice API Key</b> দিয়ে ইনভয়েস তৈরি করুন — টাকা সরাসরি সেই Brand-এর নিজের নাম্বারে যায়।</p>
 
   <div class="toc">
-    <a href="#auth">Authentication</a><a href="#create">Create Invoice</a><a href="#webhook">Webhook Listener</a>
-    <a href="#status">Status চেক</a><a href="#select">Method Select</a><a href="#verify">Verify</a><a href="#sms">SMS Ingest</a><a href="#errors">Error Codes</a>
+    <a href="#auth">Authentication</a><a href="#integration">Integration (কোড উদাহরণ)</a>
+    <a href="#status">Status চেক</a><a href="#select">Method Select</a><a href="#verify">Verify</a><a href="#errors">Error Codes</a>
   </div>
 
   <section class="doc" id="auth">
     <h2>Authentication <span class="tag auth">Bearer Key</span></h2>
-    <p style="color:var(--muted);font-size:13.5px;">প্রতিটা Brand-এর নিজস্ব API key আছে (Brand পেজে পাবেন)। ইনভয়েস তৈরি ও SMS ingest — দুটোতেই এই key লাগবে:</p>
-    <pre>Authorization: Bearer YOUR_BRAND_API_KEY</pre>
+    <p style="color:var(--muted);font-size:13.5px;">প্রতিটা Brand-এর নিজস্ব <b>Invoice API Key</b> আছে (Brand পেজে পাবেন)। ইনভয়েস তৈরি করতে এই key লাগবে:</p>
+    <pre>Authorization: Bearer YOUR_INVOICE_API_KEY</pre>
   </section>
 
-  <section class="doc" id="create">
-    <h2>Create Invoice <span class="tag post">POST /api/invoices</span></h2>
-    <p style="color:var(--muted);font-size:13.5px;">আপনার নিজের সার্ভার থেকে কল করুন। <code class="inline">payUrl</code> কাস্টমারকে পাঠান।</p>
-    <div class="codetabs" data-group="create">
-      <button class="codetab active" data-lang="curl">cURL</button>
-      <button class="codetab" data-lang="node">Node.js</button>
-      <button class="codetab" data-lang="python">Python</button>
-      <button class="codetab" data-lang="php">PHP</button>
+  <section class="doc" id="integration">
+    <h2>Integration <span class="tag post">আপনার প্ল্যাটফর্ম বেছে নিন</span></h2>
+    <p style="color:var(--muted);font-size:13.5px;margin-bottom:18px;">প্রতিটা উদাহরণে ৪টা অংশ আছে: ডাটাবেজ টেবিল, কনফিগারেশন, পেমেন্ট ইনিশিয়েশন, আর ওয়েবহুক লিসেনার — কপি করে সরাসরি আপনার প্রজেক্টে বসিয়ে দিতে পারবেন।</p>
+
+    <div class="platformPills" id="platformPills">
+      <button class="platformPill active" data-p="php">PHP</button>
+      <button class="platformPill" data-p="laravel">Laravel</button>
+      <button class="platformPill" data-p="node">Node.js</button>
+      <button class="platformPill" data-p="wordpress">WordPress</button>
+      <button class="platformPill" data-p="python">Python</button>
     </div>
 
-    <div class="codepanel active" data-group="create" data-lang="curl">
-      <pre>curl -X POST https://your-worker.workers.dev/api/invoices \
-  -H "Authorization: Bearer YOUR_BRAND_API_KEY" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "amount": 500,
-    "reference": "ORD-1001",
-    "callbackUrl": "https://yourdomain.com/callback",
-    "redirectUrl": "https://yourdomain.com/success?id=ORD-1001"
-  }'</pre>
+    <!-- ===================== PHP (raw) ===================== -->
+    <div class="platformPanel active" data-p="php">
+      <div class="codeSection"><div class="codeSectionTitle"><span class="num">01</span> DATABASE TABLE (install.sql)</div>
+<pre>CREATE TABLE `payments` (
+  `id` INT(11) PRIMARY KEY AUTO_INCREMENT,
+  `order_id` VARCHAR(100) UNIQUE,
+  `amount` DECIMAL(10,2),
+  `status` ENUM('pending','paid') DEFAULT 'pending',
+  `txn_id` VARCHAR(255) DEFAULT NULL,
+  `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);</pre></div>
+
+      <div class="codeSection"><div class="codeSectionTitle"><span class="num">02</span> CONFIG (freepay_config.php)</div>
+<pre>&lt;?php
+define('FREEPAY_API_KEY', 'YOUR_INVOICE_API_KEY');
+define('FREEPAY_API_URL', 'https://your-worker.workers.dev/api/invoices');
+$host = "localhost"; $db = "your_database_name";
+$user = "your_db_user"; $pass = "your_db_password";
+$conn = new mysqli($host, $user, $pass, $db);
+if ($conn->connect_error) { die("Connection failed: " . $conn->connect_error); }</pre></div>
+
+      <div class="codeSection"><div class="codeSectionTitle"><span class="num">03</span> PAYMENT INITIATION (index.php)</div>
+<pre>&lt;?php
+require('freepay_config.php');
+
+if (isset($_POST['pay_now'])) {
+    $amount = $_POST['amount'];
+    $order_id = "ORD-" . time();
+
+    $post_data = json_encode([
+        'amount'      => $amount,
+        'reference'   => $order_id,
+        'callbackUrl' => "https://yourdomain.com/callback.php",
+        'redirectUrl' => "https://yourdomain.com/success.php?id=" . $order_id,
+    ]);
+
+    $ch = curl_init(FREEPAY_API_URL);
+    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+    curl_setopt($ch, CURLOPT_POSTFIELDS, $post_data);
+    curl_setopt($ch, CURLOPT_HTTPHEADER, [
+        'Authorization: Bearer ' . FREEPAY_API_KEY,
+        'Content-Type: application/json',
+    ]);
+
+    $res = json_decode(curl_exec($ch), true);
+
+    if (!empty($res['payUrl'])) {
+        $conn->query("INSERT INTO payments (order_id, amount) VALUES ('$order_id', '$amount')");
+        header("Location: " . $res['payUrl']);
+    } else {
+        echo "Error: " . ($res['error'] ?? 'unknown');
+    }
+}
+?&gt;
+&lt;form method="POST"&gt;
+    &lt;input type="number" name="amount" value="50.00"&gt;
+    &lt;button type="submit" name="pay_now"&gt;Pay Now&lt;/button&gt;
+&lt;/form&gt;</pre></div>
+
+      <div class="codeSection"><div class="codeSectionTitle"><span class="num">04</span> WEBHOOK LISTENER (callback.php)</div>
+<pre>&lt;?php
+require('freepay_config.php');
+
+$raw = file_get_contents('php://input');
+$expected = hash_hmac('sha256', $raw, FREEPAY_API_KEY);
+
+if (!hash_equals($expected, $_SERVER['HTTP_X_SIGNATURE'] ?? '')) {
+    http_response_code(401);
+    exit('bad signature');
+}
+
+$data = json_decode($raw, true);
+if ($data && $data['event'] === 'invoice.verified') {
+    $order_id = $data['reference'];
+    $txn_id = $data['trxId'];
+
+    $result = $conn->query("SELECT status FROM payments WHERE order_id = '$order_id'");
+    $row = $result->fetch_assoc();
+
+    if ($row && $row['status'] !== 'paid') {
+        $conn->query("UPDATE payments SET status='paid', txn_id='$txn_id' WHERE order_id='$order_id'");
+    }
+}
+http_response_code(200);
+echo "OK";</pre></div>
     </div>
 
-    <div class="codepanel" data-group="create" data-lang="node">
-      <pre>const express = require('express');
+    <!-- ===================== Laravel ===================== -->
+    <div class="platformPanel" data-p="laravel">
+      <div class="codeSection"><div class="codeSectionTitle"><span class="num">01</span> DATABASE MIGRATION</div>
+      <div class="installNote">Run: php artisan make:migration create_payments_table</div>
+<pre>public function up()
+{
+    Schema::create('payments', function (Blueprint $table) {
+        $table->id();
+        $table->string('order_id')->unique();
+        $table->decimal('amount', 10, 2);
+        $table->enum('status', ['pending', 'paid'])->default('pending');
+        $table->string('txn_id')->nullable();
+        $table->timestamps();
+    });
+}</pre></div>
+
+      <div class="codeSection"><div class="codeSectionTitle"><span class="num">02</span> ENV CONFIGURATION (.env)</div>
+<pre>FREEPAY_API_KEY=YOUR_INVOICE_API_KEY
+FREEPAY_API_URL=https://your-worker.workers.dev/api/invoices</pre></div>
+
+      <div class="codeSection"><div class="codeSectionTitle"><span class="num">03</span> PAYMENT CONTROLLER</div>
+<pre>namespace App\Http\Controllers;
+
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Http;
+use App\Models\Payment;
+
+class PaymentController extends Controller
+{
+    public function pay(Request $request)
+    {
+        $order_id = "ORD-" . time();
+        $amount = $request->amount;
+
+        $response = Http::withToken(env('FREEPAY_API_KEY'))
+            ->post(env('FREEPAY_API_URL'), [
+                'amount'      => $amount,
+                'reference'   => $order_id,
+                'callbackUrl' => route('freepay.callback'),
+                'redirectUrl' => route('freepay.success', ['id' => $order_id]),
+            ]);
+
+        $res = $response->json();
+
+        if ($response->successful() && !empty($res['payUrl'])) {
+            Payment::create(['order_id' => $order_id, 'amount' => $amount]);
+            return redirect($res['payUrl']);
+        }
+        return back()->with('error', $res['error'] ?? 'Payment failed');
+    }
+}</pre></div>
+
+      <div class="codeSection"><div class="codeSectionTitle"><span class="num">04</span> WEBHOOK (routes/api.php)</div>
+<pre>Route::post('/callback', function (Request $request) {
+    $raw = $request->getContent();
+    $expected = hash_hmac('sha256', $raw, env('FREEPAY_API_KEY'));
+
+    if (!hash_equals($expected, $request->header('X-Signature', ''))) {
+        return response('bad signature', 401);
+    }
+
+    $data = $request->json()->all();
+    if (($data['event'] ?? '') === 'invoice.verified') {
+        $payment = \App\Models\Payment::where('order_id', $data['reference'])->first();
+        if ($payment && $payment->status !== 'paid') {
+            $payment->update(['status' => 'paid', 'txn_id' => $data['trxId']]);
+        }
+    }
+    return response('OK', 200);
+})->name('freepay.callback');</pre></div>
+    </div>
+
+    <!-- ===================== Node.js ===================== -->
+    <div class="platformPanel" data-p="node">
+      <div class="codeSection"><div class="codeSectionTitle"><span class="num">01</span> DATABASE TABLE (MySQL)</div>
+<pre>CREATE TABLE `payments` (
+  `id` INT(11) PRIMARY KEY AUTO_INCREMENT,
+  `order_id` VARCHAR(100) UNIQUE,
+  `amount` DECIMAL(10,2),
+  `status` ENUM('pending','paid') DEFAULT 'pending',
+  `txn_id` VARCHAR(255) DEFAULT NULL,
+  `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);</pre></div>
+
+      <div class="codeSection"><div class="codeSectionTitle"><span class="num">02</span> DB CONFIG (db.js)</div>
+      <div class="installNote">Install: npm install mysql2 express axios</div>
+<pre>const mysql = require('mysql2');
+const connection = mysql.createConnection({
+  host: 'localhost',
+  user: 'your_db_user',
+  password: 'your_db_password',
+  database: 'your_db_name',
+});
+connection.connect((err) => { if (err) throw err; console.log('Connected!'); });
+module.exports = connection.promise();</pre></div>
+
+      <div class="codeSection"><div class="codeSectionTitle"><span class="num">03</span> PAYMENT INITIATION (server.js)</div>
+<pre>const express = require('express');
 const axios = require('axios');
+const db = require('./db');
 const app = express();
 app.use(express.urlencoded({ extended: true }));
 
-const API_KEY = "YOUR_BRAND_API_KEY";
+const API_KEY = "YOUR_INVOICE_API_KEY";
 const API_URL = "https://your-worker.workers.dev/api/invoices";
 
 app.post('/pay', async (req, res) => {
@@ -79,145 +270,199 @@ app.post('/pay', async (req, res) => {
             headers: { Authorization: `Bearer ${API_KEY}` }
         });
 
-        res.redirect(response.data.payUrl);
+        if (response.data.payUrl) {
+            await db.execute("INSERT INTO payments (order_id, amount) VALUES (?, ?)", [order_id, amount]);
+            res.redirect(response.data.payUrl);
+        } else {
+            res.send("Error: " + response.data.error);
+        }
     } catch (error) {
         res.status(500).send("API Error");
     }
-});</pre>
-    </div>
+});</pre></div>
 
-    <div class="codepanel" data-group="create" data-lang="python">
-      <pre>import time
-import requests
-from flask import Flask, request, redirect
-
-app = Flask(__name__)
-
-API_KEY = "YOUR_BRAND_API_KEY"
-API_URL = "https://your-worker.workers.dev/api/invoices"
-
-@app.route("/pay", methods=["POST"])
-def pay():
-    amount = request.form["amount"]
-    order_id = f"ORD-{int(time.time() * 1000)}"
-
-    resp = requests.post(API_URL, json={
-        "amount": amount,
-        "reference": order_id,
-        "callbackUrl": "https://yourdomain.com/callback",
-        "redirectUrl": f"https://yourdomain.com/success?id={order_id}",
-    }, headers={"Authorization": f"Bearer {API_KEY}"})
-
-    data = resp.json()
-    if resp.ok:
-        return redirect(data["payUrl"])
-    return f"API Error: {data.get('error')}", 500</pre>
-    </div>
-
-    <div class="codepanel" data-group="create" data-lang="php">
-      <pre>&lt;?php
-$apiKey = "YOUR_BRAND_API_KEY";
-$apiUrl = "https://your-worker.workers.dev/api/invoices";
-$orderId = "ORD-" . round(microtime(true) * 1000);
-
-$payload = json_encode([
-    "amount" => $_POST["amount"],
-    "reference" => $orderId,
-    "callbackUrl" => "https://yourdomain.com/callback",
-    "redirectUrl" => "https://yourdomain.com/success?id=" . $orderId,
-]);
-
-$ch = curl_init($apiUrl);
-curl_setopt_array($ch, [
-    CURLOPT_POST => true,
-    CURLOPT_POSTFIELDS => $payload,
-    CURLOPT_HTTPHEADER => [
-        "Authorization: Bearer $apiKey",
-        "Content-Type: application/json",
-    ],
-    CURLOPT_RETURNTRANSFER => true,
-]);
-$response = json_decode(curl_exec($ch), true);
-curl_close($ch);
-
-if (isset($response["payUrl"])) {
-    header("Location: " . $response["payUrl"]);
-    exit;
-}
-http_response_code(500);
-echo "API Error: " . ($response["error"] ?? "unknown");</pre>
-    </div>
-  </section>
-
-  <section class="doc" id="webhook">
-    <h2>Webhook Listener <span class="tag post">callbackUrl</span></h2>
-    <p style="color:var(--muted);font-size:13.5px;">ইনভয়েস verified হলে <code class="inline">callbackUrl</code>-এ signed POST যায়। ব্যালেন্স/অর্ডার আপডেট করার আগে অবশ্যই <code class="inline">X-Signature</code> (HMAC-SHA256, আপনার Brand API key দিয়ে সাইন করা) ভেরিফাই করুন।</p>
-    <div class="codetabs" data-group="webhook">
-      <button class="codetab active" data-lang="node">Node.js</button>
-      <button class="codetab" data-lang="python">Python</button>
-      <button class="codetab" data-lang="php">PHP</button>
-    </div>
-
-    <div class="codepanel active" data-group="webhook" data-lang="node">
-      <pre>const crypto = require('crypto');
+      <div class="codeSection"><div class="codeSectionTitle"><span class="num">04</span> WEBHOOK LISTENER</div>
+<pre>const crypto = require('crypto');
 app.use(express.json());
 
 app.post('/callback', async (req, res) => {
     const raw = JSON.stringify(req.body);
-    const expected = crypto.createHmac('sha256', process.env.BRAND_API_KEY)
-        .update(raw).digest('hex');
+    const expected = crypto.createHmac('sha256', API_KEY).update(raw).digest('hex');
 
     if (req.headers['x-signature'] !== expected) {
         return res.status(401).send('bad signature');
     }
 
-    const { event, reference, trxId, amount } = req.body;
+    const { event, reference, trxId } = req.body;
     if (event === 'invoice.verified') {
-        // mark order `reference` as paid, store trxId, credit amount, etc.
+        const [rows] = await db.execute("SELECT status FROM payments WHERE order_id = ?", [reference]);
+        if (rows.length && rows[0].status !== 'paid') {
+            await db.execute("UPDATE payments SET status='paid', txn_id=? WHERE order_id=?", [trxId, reference]);
+        }
     }
     res.sendStatus(200);
-});</pre>
+});</pre></div>
     </div>
 
-    <div class="codepanel" data-group="webhook" data-lang="python">
-      <pre>import hmac, hashlib, json
-from flask import Flask, request
+    <!-- ===================== WordPress ===================== -->
+    <div class="platformPanel" data-p="wordpress">
+      <div class="codeSection"><div class="codeSectionTitle"><span class="num">01</span> DATABASE TABLE</div>
+<pre>CREATE TABLE `wp_freepay_payments` (
+  `id` BIGINT(20) PRIMARY KEY AUTO_INCREMENT,
+  `order_id` VARCHAR(100) UNIQUE,
+  `amount` DECIMAL(10,2),
+  `status` VARCHAR(20) DEFAULT 'pending',
+  `txn_id` VARCHAR(255) DEFAULT NULL,
+  `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);</pre></div>
+
+      <div class="codeSection"><div class="codeSectionTitle"><span class="num">02</span> SETUP CONSTANTS (functions.php)</div>
+<pre>define('FREEPAY_API_KEY', 'YOUR_INVOICE_API_KEY');
+define('FREEPAY_API_URL', 'https://your-worker.workers.dev/api/invoices');</pre></div>
+
+      <div class="codeSection"><div class="codeSectionTitle"><span class="num">03</span> INITIATE PAYMENT</div>
+<pre>function initiate_freepay_payment($amount) {
+    global $wpdb;
+    $order_id = "ORD-" . time();
+    $table_name = $wpdb->prefix . 'freepay_payments';
+
+    $response = wp_remote_post(FREEPAY_API_URL, [
+        'headers' => [
+            'Authorization' => 'Bearer ' . FREEPAY_API_KEY,
+            'Content-Type'  => 'application/json',
+        ],
+        'body' => json_encode([
+            'amount'      => $amount,
+            'reference'   => $order_id,
+            'callbackUrl' => home_url('/wp-json/freepay/v1/callback'),
+            'redirectUrl' => home_url('/payment-success?id=' . $order_id),
+        ]),
+    ]);
+
+    if (!is_wp_error($response)) {
+        $body = json_decode(wp_remote_retrieve_body($response), true);
+        if (!empty($body['payUrl'])) {
+            $wpdb->insert($table_name, ['order_id' => $order_id, 'amount' => $amount]);
+            wp_redirect($body['payUrl']); exit;
+        }
+    }
+}</pre></div>
+
+      <div class="codeSection"><div class="codeSectionTitle"><span class="num">04</span> WEBHOOK LISTENER (REST API)</div>
+<pre>add_action('rest_api_init', function () {
+    register_rest_route('freepay/v1', '/callback', [
+        'methods'  => 'POST',
+        'callback' => 'freepay_handle_callback',
+        'permission_callback' => '__return_true',
+    ]);
+});
+
+function freepay_handle_callback($request) {
+    global $wpdb;
+    $raw = $request->get_body();
+    $expected = hash_hmac('sha256', $raw, FREEPAY_API_KEY);
+
+    if (!hash_equals($expected, $request->get_header('x_signature') ?? '')) {
+        return new WP_REST_Response('bad signature', 401);
+    }
+
+    $data = json_decode($raw, true);
+    $table_name = $wpdb->prefix . 'freepay_payments';
+
+    if ($data && $data['event'] === 'invoice.verified') {
+        $order_id = $data['reference'];
+        $txn_id   = $data['trxId'];
+        $order = $wpdb->get_row($wpdb->prepare("SELECT status FROM $table_name WHERE order_id = %s", $order_id));
+
+        if ($order && $order->status !== 'paid') {
+            $wpdb->update($table_name, ['status' => 'paid', 'txn_id' => $txn_id], ['order_id' => $order_id]);
+        }
+        return new WP_REST_Response('SUCCESS', 200);
+    }
+    return new WP_REST_Response('IGNORED', 200);
+}</pre></div>
+    </div>
+
+    <!-- ===================== Python ===================== -->
+    <div class="platformPanel" data-p="python">
+      <div class="codeSection"><div class="codeSectionTitle"><span class="num">01</span> DATABASE TABLE (MySQL)</div>
+<pre>CREATE TABLE `payments` (
+  `id` INT(11) PRIMARY KEY AUTO_INCREMENT,
+  `order_id` VARCHAR(100) UNIQUE,
+  `amount` DECIMAL(10,2),
+  `status` ENUM('pending','paid') DEFAULT 'pending',
+  `txn_id` VARCHAR(255) DEFAULT NULL,
+  `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);</pre></div>
+
+      <div class="codeSection"><div class="codeSectionTitle"><span class="num">02</span> SETUP & CONFIG (app.py)</div>
+      <div class="installNote">Install: pip install flask requests mysql-connector-python</div>
+<pre>from flask import Flask, request, redirect, jsonify
+import requests, mysql.connector, hmac, hashlib, time
 
 app = Flask(__name__)
-BRAND_API_KEY = "YOUR_BRAND_API_KEY"
+API_KEY = "YOUR_INVOICE_API_KEY"
+API_URL = "https://your-worker.workers.dev/api/invoices"
 
-@app.route("/callback", methods=["POST"])
+db = mysql.connector.connect(
+    host="localhost", user="your_db_user",
+    password="your_db_password", database="your_db_name"
+)
+cursor = db.cursor(dictionary=True)</pre></div>
+
+      <div class="codeSection"><div class="codeSectionTitle"><span class="num">03</span> CREATE PAYMENT ROUTE</div>
+<pre>@app.route('/pay', methods=['POST'])
+def pay():
+    amount = request.form.get('amount')
+    order_id = f"ORD-{int(time.time())}"
+
+    payload = {
+        "amount": amount,
+        "reference": order_id,
+        "callbackUrl": "https://yourdomain.com/callback",
+        "redirectUrl": f"https://yourdomain.com/success?id={order_id}",
+    }
+    headers = {"Authorization": f"Bearer {API_KEY}"}
+
+    try:
+        response = requests.post(API_URL, json=payload, headers=headers)
+        res_data = response.json()
+
+        if res_data.get("payUrl"):
+            sql = "INSERT INTO payments (order_id, amount) VALUES (%s, %s)"
+            cursor.execute(sql, (order_id, amount))
+            db.commit()
+            return redirect(res_data["payUrl"])
+        return f"Error: {res_data.get('error')}"
+    except Exception as e:
+        return str(e)</pre></div>
+
+      <div class="codeSection"><div class="codeSectionTitle"><span class="num">04</span> WEBHOOK LISTENER</div>
+<pre>@app.route('/callback', methods=['POST'])
 def callback():
     raw = request.get_data()
-    expected = hmac.new(BRAND_API_KEY.encode(), raw, hashlib.sha256).hexdigest()
+    expected = hmac.new(API_KEY.encode(), raw, hashlib.sha256).hexdigest()
 
-    if request.headers.get("X-Signature") != expected:
+    if request.headers.get('X-Signature') != expected:
         return "bad signature", 401
 
-    data = request.get_json()
-    if data.get("event") == "invoice.verified":
-        # mark order data["reference"] as paid, store data["trxId"], etc.
-        pass
-    return "", 200</pre>
-    </div>
+    data = request.json
+    if data and data.get('event') == 'invoice.verified':
+        order_id = data.get('reference')
+        txn_id = data.get('trxId')
 
-    <div class="codepanel" data-group="webhook" data-lang="php">
-      <pre>&lt;?php
-$brandApiKey = "YOUR_BRAND_API_KEY";
-$raw = file_get_contents("php://input");
-$expected = hash_hmac("sha256", $raw, $brandApiKey);
+        cursor.execute("SELECT status FROM payments WHERE order_id = %s", (order_id,))
+        order = cursor.fetchone()
 
-$signature = $_SERVER["HTTP_X_SIGNATURE"] ?? "";
-if (!hash_equals($expected, $signature)) {
-    http_response_code(401);
-    exit("bad signature");
-}
+        if order and order['status'] != 'paid':
+            cursor.execute("UPDATE payments SET status='paid', txn_id=%s WHERE order_id=%s", (txn_id, order_id))
+            db.commit()
+        return "SUCCESS", 200
 
-$data = json_decode($raw, true);
-if (($data["event"] ?? "") === "invoice.verified") {
-    // mark order $data["reference"] as paid, store $data["trxId"], etc.
-}
-http_response_code(200);</pre>
+    return "IGNORED", 200
+
+if __name__ == '__main__':
+    app.run(debug=True)</pre></div>
     </div>
   </section>
 
@@ -240,20 +485,6 @@ http_response_code(200);</pre>
     <p style="color:var(--muted);font-size:13.5px;">TrxID শুধু তখনই ম্যাচ করবে যদি এটি এই ইনভয়েসের নিজের ১৫ মিনিটের উইন্ডোর মধ্যে আসা SMS-এর সাথে মেলে — অর্থাৎ শেষ ১৫ মিনিটে "verify" হওয়া লাগবে।</p>
   </section>
 
-  <section class="doc" id="sms">
-    <h2>SMS Ingest <span class="tag post">POST</span></h2>
-    <div class="keyval" style="color:var(--text);">POST /api/sms/ingest</div>
-    <pre>{
-  "trxId": "8N7A1B2C3D",
-  "amount": 500,
-  "method": "bkash",
-  "senderNumber": "01712345678",
-  "receivedAt": 1735000000000,
-  "rawSms": "You have received Tk 500.00 from ..."
-}</pre>
-    <p style="color:var(--muted);font-size:13.5px;">FreePay Sync অ্যাপ প্রতিটা কনফার্মেশন SMS পেলেই এখানে পাঠায়। একই Brand-এ একই trxId দ্বিতীয়বার এলে চুপচাপ ignore হয়ে যায় — replay-safe।</p>
-  </section>
-
   <section class="doc" id="errors">
     <h2>Error Codes</h2>
     <table class="tx"><tr><th>Status</th><th>মানে</th></tr>
@@ -264,17 +495,31 @@ http_response_code(200);</pre>
       <tr><td>409</td><td>Invoice expired অথবা TrxID আগেই ব্যবহার হয়েছে।</td></tr>
     </table>
   </section>
+
+  <div class="helpCard">
+    <div class="icon">🤝</div>
+    <h3>Need Help with Integration?</h3>
+    <p>আপনার ওয়েবসাইটে অটো পেমেন্ট ইন্টিগ্রেশনের জন্য এই সম্পূর্ণ ডকুমেন্টেশনটি কপি করে যেকোনো একটি AI মডেলকে দিতে পারেন অথবা আমাদের সাপোর্ট টিমের সাথে যোগাযোগ করতে পারেন।</p>
+    <a class="btn btn-primary" id="contactSupportBtn" href="#">🎧 Contact Support</a>
+  </div>
 </div>
 <script src="/assets/app.js"></script>
 <script>
 PL.requireAuth("docs");
 PL.attachCopyButtons();
 
-document.querySelectorAll(".codetab").forEach((btn) => btn.addEventListener("click", () => {
-  const group = btn.dataset.group, lang = btn.dataset.lang;
-  document.querySelectorAll(`.codetab[data-group="${group}"]`).forEach((b) => b.classList.toggle("active", b === btn));
-  document.querySelectorAll(`.codepanel[data-group="${group}"]`).forEach((p) => p.classList.toggle("active", p.dataset.lang === lang));
+document.querySelectorAll(".platformPill").forEach((btn) => btn.addEventListener("click", () => {
+  const p = btn.dataset.p;
+  document.querySelectorAll(".platformPill").forEach((b) => b.classList.toggle("active", b === btn));
+  document.querySelectorAll(".platformPanel").forEach((panel) => panel.classList.toggle("active", panel.dataset.p === p));
 }));
+
+PL.api("/config/public").then((r) => {
+  const email = r.ok ? r.data.supportEmail : "";
+  const btn = document.getElementById("contactSupportBtn");
+  if (email) btn.href = "mailto:" + email;
+  else btn.addEventListener("click", (e) => { e.preventDefault(); PL.toast("সাপোর্ট ইমেইল এখনো সেট করা হয়নি।", "bad"); });
+});
 </script>
 </body>
 </html>
