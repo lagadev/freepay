@@ -45,20 +45,23 @@ CREATE INDEX IF NOT EXISTS idx_brands_api_key ON brands(api_key);
 CREATE INDEX IF NOT EXISTS idx_brands_ingest_key ON brands(ingest_key);
 
 CREATE TABLE IF NOT EXISTS invoices (
-  id              TEXT PRIMARY KEY,             -- INV-XXXXXXXX
-  brand_id        TEXT NOT NULL,
-  reference       TEXT,
-  amount          REAL NOT NULL,
-  method          TEXT,                         -- bkash|nagad|upay|rocket|cellfin, NULL until chosen
-  merchant_number TEXT,
-  status          TEXT NOT NULL DEFAULT 'pending', -- pending | verified | expired
-  callback_url    TEXT,
-  redirect_url    TEXT,
-  trx_id          TEXT,
-  sender_number   TEXT,
-  created_at      INTEGER NOT NULL,
-  expires_at      INTEGER NOT NULL,              -- created_at + 15 minutes
-  verified_at     INTEGER,
+  id                    TEXT PRIMARY KEY,             -- INV-XXXXXXXX
+  brand_id              TEXT NOT NULL,                -- for 'subscription' purpose, this is the PLATFORM'S OWN receiving brand
+  reference             TEXT,
+  amount                REAL NOT NULL,
+  method                TEXT,                         -- bkash|nagad|upay|rocket|cellfin, NULL until chosen
+  merchant_number       TEXT,
+  status                TEXT NOT NULL DEFAULT 'pending', -- pending | verified | expired
+  callback_url          TEXT,
+  redirect_url          TEXT,
+  trx_id                TEXT,
+  sender_number         TEXT,
+  purpose               TEXT NOT NULL DEFAULT 'customer', -- 'customer' | 'subscription'
+  plan_id               TEXT,                         -- set when purpose = 'subscription'
+  subscribing_brand_id  TEXT,                         -- which merchant brand gets upgraded when this pays
+  created_at            INTEGER NOT NULL,
+  expires_at            INTEGER NOT NULL,              -- created_at + 15 minutes
+  verified_at           INTEGER,
   FOREIGN KEY (brand_id) REFERENCES brands(id)
 );
 CREATE INDEX IF NOT EXISTS idx_invoices_brand ON invoices(brand_id, created_at DESC);
@@ -82,11 +85,44 @@ CREATE TABLE IF NOT EXISTS sms_transactions (
 CREATE INDEX IF NOT EXISTS idx_sms_brand_trx ON sms_transactions(brand_id, trx_id);
 CREATE INDEX IF NOT EXISTS idx_sms_brand_pending ON sms_transactions(brand_id, method, matched_invoice_id);
 
--- Small admin-editable key/value store: APK download URL, donate numbers, site name, etc.
+-- Small admin-editable key/value store: APK download URL, subscription
+-- payment numbers, site name, custom domain, etc.
 CREATE TABLE IF NOT EXISTS app_config (
   key   TEXT PRIMARY KEY,
   value TEXT
 );
+
+-- Admin-managed pricing plans shown on the Buy Plans page. "Flat rate / per
+-- brand" — a subscription is attached to one brand at a time.
+CREATE TABLE IF NOT EXISTS plans (
+  id               TEXT PRIMARY KEY,
+  name             TEXT NOT NULL,           -- e.g. "Weekly Plan"
+  days             INTEGER NOT NULL,        -- access duration in days
+  price            REAL NOT NULL,
+  original_price   REAL,                    -- shown struck-through, optional
+  badge_text       TEXT,                    -- e.g. "SAVE 53%", optional
+  features         TEXT NOT NULL DEFAULT '[]', -- JSON array of strings
+  is_trial         INTEGER NOT NULL DEFAULT 0, -- admin-designated free-trial plan (price should be 0)
+  enabled          INTEGER NOT NULL DEFAULT 1,
+  sort_order       INTEGER NOT NULL DEFAULT 0,
+  created_at       INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_plans_enabled ON plans(enabled, sort_order);
+
+-- One row per brand tracking its current subscription. A brand with no row
+-- (or an expired one) is on no active plan.
+CREATE TABLE IF NOT EXISTS subscriptions (
+  id          TEXT PRIMARY KEY,
+  brand_id    TEXT NOT NULL UNIQUE,
+  plan_id     TEXT NOT NULL,
+  status      TEXT NOT NULL DEFAULT 'active', -- active | expired
+  started_at  INTEGER NOT NULL,
+  expires_at  INTEGER NOT NULL,
+  created_at  INTEGER NOT NULL,
+  FOREIGN KEY (brand_id) REFERENCES brands(id),
+  FOREIGN KEY (plan_id) REFERENCES plans(id)
+);
+CREATE INDEX IF NOT EXISTS idx_subscriptions_brand ON subscriptions(brand_id);
 
 -- Every admin action (suspend, delete, edit, config change, force-logout...)
 -- gets recorded here — visible in Admin Panel → Audit Log.
