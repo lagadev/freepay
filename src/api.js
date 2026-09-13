@@ -536,10 +536,10 @@ async function myStats(request, env) {
   const startOfMonth = new Date(); startOfMonth.setDate(1); startOfMonth.setHours(0, 0, 0, 0);
 
   const [totalRow, todayRow, monthRow, countRow] = await Promise.all([
-    env.DB.prepare(`SELECT COALESCE(SUM(amount),0) AS s FROM invoices WHERE brand_id IN (${placeholders}) AND status='verified'`).bind(...ids).first(),
-    env.DB.prepare(`SELECT COALESCE(SUM(amount),0) AS s FROM invoices WHERE brand_id IN (${placeholders}) AND status='verified' AND verified_at>=?`).bind(...ids, startOfToday.getTime()).first(),
-    env.DB.prepare(`SELECT COALESCE(SUM(amount),0) AS s FROM invoices WHERE brand_id IN (${placeholders}) AND status='verified' AND verified_at>=?`).bind(...ids, startOfMonth.getTime()).first(),
-    env.DB.prepare(`SELECT COUNT(*) AS c FROM invoices WHERE brand_id IN (${placeholders})`).bind(...ids).first(),
+    env.DB.prepare(`SELECT COALESCE(SUM(amount),0) AS s FROM invoices WHERE brand_id IN (${placeholders}) AND status='verified' AND purpose='customer'`).bind(...ids).first(),
+    env.DB.prepare(`SELECT COALESCE(SUM(amount),0) AS s FROM invoices WHERE brand_id IN (${placeholders}) AND status='verified' AND purpose='customer' AND verified_at>=?`).bind(...ids, startOfToday.getTime()).first(),
+    env.DB.prepare(`SELECT COALESCE(SUM(amount),0) AS s FROM invoices WHERE brand_id IN (${placeholders}) AND status='verified' AND purpose='customer' AND verified_at>=?`).bind(...ids, startOfMonth.getTime()).first(),
+    env.DB.prepare(`SELECT COUNT(*) AS c FROM invoices WHERE brand_id IN (${placeholders}) AND purpose='customer'`).bind(...ids).first(),
   ]);
   return json({ totalReceived: totalRow.s, today: todayRow.s, month: monthRow.s, totalVolume: totalRow.s, transactionCount: countRow.c }, 200);
 }
@@ -548,11 +548,13 @@ async function myTransactions(request, env, url) {
   const user = await getSessionUser(request, env);
   if (!user) return json({ error: "Not logged in." }, 401);
   const limit = Math.min(Number(url.searchParams.get("limit")) || 20, 200);
+  const now = Date.now();
   const rows = await env.DB.prepare(
-    `SELECT i.id, i.reference, i.amount, i.method, i.status, i.trx_id, i.created_at, i.verified_at, b.name AS brand_name
+    `SELECT i.id, i.reference, i.amount, i.method, i.trx_id, i.created_at, i.verified_at, b.name AS brand_name,
+            CASE WHEN i.status = 'pending' AND i.expires_at < ? THEN 'expired' ELSE i.status END AS status
      FROM invoices i JOIN brands b ON b.id = i.brand_id
-     WHERE b.user_id = ? ORDER BY i.created_at DESC LIMIT ?`
-  ).bind(user.id, limit).all();
+     WHERE b.user_id = ? AND i.purpose = 'customer' ORDER BY i.created_at DESC LIMIT ?`
+  ).bind(now, user.id, limit).all();
   return json({ transactions: rows.results || [] }, 200);
 }
 
@@ -999,28 +1001,36 @@ async function adminTransactions(request, env, url) {
   const page = Math.max(1, Number(url.searchParams.get("page")) || 1);
   const limit = Math.min(Number(url.searchParams.get("limit")) || 50, 200);
   const offset = (page - 1) * limit;
+  const now = Date.now();
 
-  const clauses = [];
-  const params = [];
+  const outerClauses = [];
+  const outerParams = [];
   if (search) {
-    clauses.push(`(i.id LIKE ? OR i.trx_id LIKE ? OR i.reference LIKE ? OR b.name LIKE ? OR u.email LIKE ?)`);
-    params.push(`%${search}%`, `%${search}%`, `%${search}%`, `%${search}%`, `%${search}%`);
+    outerClauses.push(`(inv.id LIKE ? OR inv.trx_id LIKE ? OR inv.reference LIKE ? OR b.name LIKE ? OR u.email LIKE ?)`);
+    outerParams.push(`%${search}%`, `%${search}%`, `%${search}%`, `%${search}%`, `%${search}%`);
   }
   if (status && ["pending", "verified", "expired"].includes(status)) {
-    clauses.push(`i.status = ?`);
-    params.push(status);
+    outerClauses.push(`inv.eff_status = ?`);
+    outerParams.push(status);
   }
-  const where = clauses.length ? `WHERE ${clauses.join(" AND ")}` : "";
+  const outerWhere = outerClauses.length ? `WHERE ${outerClauses.join(" AND ")}` : "";
+
+  const cte = `WITH inv AS (
+    SELECT *, CASE WHEN status = 'pending' AND expires_at < ? THEN 'expired' ELSE status END AS eff_status
+    FROM invoices WHERE purpose = 'customer'
+  )`;
 
   const [rows, countRow] = await Promise.all([
     env.DB.prepare(
-      `SELECT i.id, i.reference, i.amount, i.method, i.status, i.trx_id, i.created_at, i.verified_at, b.name AS brand_name, u.email AS owner_email
-       FROM invoices i JOIN brands b ON b.id = i.brand_id JOIN users u ON u.id = b.user_id
-       ${where} ORDER BY i.created_at DESC LIMIT ? OFFSET ?`
-    ).bind(...params, limit, offset).all(),
+      `${cte}
+       SELECT inv.id, inv.reference, inv.amount, inv.method, inv.trx_id, inv.created_at, inv.verified_at,
+              b.name AS brand_name, u.email AS owner_email, inv.eff_status AS status
+       FROM inv JOIN brands b ON b.id = inv.brand_id JOIN users u ON u.id = b.user_id
+       ${outerWhere} ORDER BY inv.created_at DESC LIMIT ? OFFSET ?`
+    ).bind(now, ...outerParams, limit, offset).all(),
     env.DB.prepare(
-      `SELECT COUNT(*) c FROM invoices i JOIN brands b ON b.id = i.brand_id JOIN users u ON u.id = b.user_id ${where}`
-    ).bind(...params).first(),
+      `${cte} SELECT COUNT(*) c FROM inv JOIN brands b ON b.id = inv.brand_id JOIN users u ON u.id = b.user_id ${outerWhere}`
+    ).bind(now, ...outerParams).first(),
   ]);
   return json({ transactions: rows.results || [], total: countRow.c, page, limit }, 200);
 }
